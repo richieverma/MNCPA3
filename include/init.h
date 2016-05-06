@@ -1,0 +1,1 @@
+void init_response(int sock_index, char *cntrl_payload);

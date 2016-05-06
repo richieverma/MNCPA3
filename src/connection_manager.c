@@ -54,6 +54,8 @@ void main_loop()
                     /* Add to watched socket list */
                     FD_SET(fdaccept, &master_list);
                     if(fdaccept > head_fd) head_fd = fdaccept;
+
+                    printf("New control socket");
                 }
 
                 /* router_socket */
@@ -81,6 +83,7 @@ void main_loop()
 
 void init()
 {
+    printf("\nINIT\n");
     control_socket = create_control_sock();
 
     //router_socket and data_socket will be initialized after INIT from controller
