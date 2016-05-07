@@ -45,6 +45,7 @@ extern fd_set master_list;
 extern int head_fd;
 
 unsigned num_routers, route_table[5][5], my_router_id, my_table_id, my_data_port, my_router_port;
+char *my_router_ip;
 
 /*
 ** packi16() -- store a 16-bit int into a char buffer (like htons())
@@ -112,6 +113,8 @@ void init_response(int sock_index, char *cntrl_payload)
 	    	my_table_id = no_routers - i - 1;
 	    	my_data_port = r->data_port;
 	    	my_router_port = r->router_port;
+	    	my_router_ip = (char *)malloc(strlen(router_ip));
+	    	strcpy(my_router_ip,router_ip);
 	    	
 	    	//Initialize data socket
 	    	data_socket = create_tcp_sock(r->data_port);
@@ -181,70 +184,48 @@ void init_response(int sock_index, char *cntrl_payload)
 
 void send_initial_routing_packet(){
 	uint16_t num_update_fields = 0;
-    uint16_t payload_len, response_len;
-	char *cntrl_response_header, *cntrl_response_payload, *cntrl_response, *buf = (char *)malloc(16);
+    uint16_t response_len;
+	char *routing_response, *buf = (char *)malloc(16);
+	struct sockaddr_in sa;
+	char str[INET_ADDRSTRLEN];
 
-	payload_len = 8 + num_routers*sizeof(uint16_t)*6; // Four fields of 2 bytes per router, AND 1 field of 4 bytes, 8 bytes for num_update_fields, source router port, source ip address
-	cntrl_response_payload = (char *) malloc(payload_len);
+	response_len = 8 + num_routers*sizeof(uint16_t)*6; // Four fields of 2 bytes per router, AND 1 field of 4 bytes, 8 bytes for num_update_fields, source router port, source ip address
+	routing_response = (char *) malloc(response_len);
 
     
 	LIST_FOREACH(router_itr, &router_neighbour_list, neighbour) {
-		struct sockaddr_in sa;
-		char str[INET_ADDRSTRLEN];
+
 
 		// store this IP address in sa:
 		inet_pton(AF_INET, router_itr->router_ip, &(sa.sin_addr));
 		
 		//inet_aton(router_itr->router_ip, buf);
-		memcpy(cntrl_response_payload + (num_update_fields * 12), &(sa.sin_addr), sizeof(struct in_addr));
+		memcpy(routing_response + 8 + (num_update_fields * 12), &(sa.sin_addr), sizeof(struct in_addr));
         packi16(buf, router_itr->router_port);
-        memcpy(cntrl_response_payload + (num_update_fields * 12) + 4, buf, 2);
+        memcpy(routing_response + 8 +  (num_update_fields * 12) + 4, buf, 2);
         packi16(buf, 0);
-        memcpy(cntrl_response_payload + (num_update_fields * 12) + 6, buf, 2);
+        memcpy(routing_response + 8 +  (num_update_fields * 12) + 6, buf, 2);
         packi16(buf, router_itr->router_id);
-        memcpy(cntrl_response_payload + (num_update_fields * 12) + 8, buf, 2);
+        memcpy(routing_response + 8 +  (num_update_fields * 12) + 8, buf, 2);
         packi16(buf, router_itr->cost);
-        memcpy(cntrl_response_payload + (num_update_fields * 12) + 10, buf, 2);			    
+        memcpy(routing_response + 8 +  (num_update_fields * 12) + 10, buf, 2);			    
         printf("ROUTER_ID:%d ROUTER_PORT:%d DATA_PORT:%d COST:%d ROUTER_IP:%s NEXT_HOP:%d TABLE_ID:%d\n",router_itr->router_id, router_itr->router_port, router_itr->data_port, router_itr->cost, router_itr->router_ip, router_itr->next_hop, router_itr->table_id);
         num_update_fields++;
     } 
 
+    //Number of update fields
+    packi16(buf, num_update_fields);
+    memcpy(routing_response, buf, 2);
+
+    //Source router port
+	packi16(buf, my_router_port);
+	memcpy(routing_response + 2, buf, 2);
+
+	//Source Router IP
+	inet_pton(AF_INET, my_router_ip, &(sa.sin_addr));
+	memcpy(routing_response + 4, &(sa.sin_addr), sizeof(struct in_addr));
+
     LIST_FOREACH(router_itr, &router_neighbour_list, neighbour) {
-	    cntrl_response_header = create_response_header(router_itr->router_port, 2, 0, payload_len);
-
-		response_len = CNTRL_RESP_HEADER_SIZE+payload_len;
-		cntrl_response = (char *) malloc(response_len);
-		/* Copy Header */
-		memcpy(cntrl_response, cntrl_response_header, CNTRL_RESP_HEADER_SIZE);
-		free(cntrl_response_header);
-		/* Copy Payload */
-		memcpy(cntrl_response+CNTRL_RESP_HEADER_SIZE, cntrl_response_payload, payload_len);
-		
-
-		//CREATE SOCKET TO SEND INFO
-		/*
-	    int sock;
-	    struct sockaddr_in control_addr;
-	    socklen_t addrlen = sizeof(control_addr);
-
-	    sock = socket(AF_INET, SOCK_DGRAM, 0);
-	    if(sock < 0)
-	        ERROR("socket() failed");*/
-
-	    /* Make socket re-usable */
-	    /*
-	    if(setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (int[]){1}, sizeof(int)) < 0)
-	        ERROR("setsockopt() failed");
-
-	    bzero(&control_addr, sizeof(control_addr));
-
-	    control_addr.sin_family = AF_INET;
-	    control_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-	    control_addr.sin_port = htons(my_router_port);
-
-		sendALL(sock, cntrl_response, response_len);
-		*/
-
 		//Reference Beej's Guide Section 6.3
 		int sockfd;
 		struct addrinfo hints, *servinfo, *p;
@@ -254,7 +235,7 @@ void send_initial_routing_packet(){
 
 		snprintf(buf,5,"%d",router_itr->router_port);
 		printf("Neighbour PORT: %s\n", buf);
-
+		printf("Size of routing packet: %d\n", response_len);
 
 		memset(&hints, 0, sizeof hints);
 		hints.ai_family = AF_UNSPEC;
@@ -277,7 +258,7 @@ void send_initial_routing_packet(){
 			return;
 		}
 
-		if (numbytes = sendto(sockfd, cntrl_response, response_len, 0, p->ai_addr, p->ai_addrlen) == -1){
+		if ((numbytes = sendto(sockfd, routing_response, response_len, 0, p->ai_addr, p->ai_addrlen)) == -1){
 				perror("talker: sendto error");
 			
 			//printf("Sent %d bytes so far. Total to be sent:%d\n", numbytes, response_len);
@@ -286,8 +267,7 @@ void send_initial_routing_packet(){
 		freeaddrinfo(servinfo);
 		printf("Sent %d bytes in total. Out of:%d\n", numbytes, response_len);
 		close(sockfd);
-		free(cntrl_response);
 		//close(sock);
 	} 
-	free(cntrl_response_payload);
+	free(routing_response);
 }

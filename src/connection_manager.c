@@ -65,31 +65,8 @@ void main_loop()
                 /* router_socket */
                 else if(sock_index == router_socket){
                     //call handler that will call recvfrom() .....
+                    router_recv_hook(sock_index);
                     printf("\n----------------New router data----------------\n");
-                    struct sockaddr_storage their_addr;
-                    char *cntrl_header, *payload;
-                    socklen_t addr_len;
-                    uint16_t update_len;
-                    unsigned numbytes = 0;
-
-                    /* Get control header */
-                    cntrl_header = (char *) malloc(sizeof(char)*CNTRL_HEADER_SIZE);
-                    bzero(cntrl_header, CNTRL_HEADER_SIZE);
-
-                    addr_len = sizeof their_addr;
-                    if (recvfrom(sock_index, cntrl_header, CNTRL_HEADER_SIZE , 0, (struct sockaddr *)&their_addr, &addr_len) == -1) {
-                        perror("recvfrom");
-                        exit(1);
-                    }
-                    memcpy(&update_len, cntrl_header, sizeof(update_len));
-
-                    int payload_length = update_len*12;
-                    payload = (char *) malloc(sizeof(char)*payload_length);
-                    printf("\nPayload Length: %d\n", payload_length);
-                    while (numbytes += recvfrom(sock_index, payload, payload_length + numbytes , 0, (struct sockaddr *)&their_addr, &addr_len) < payload_length);
-
-
-
                 }
 
                 /* data_socket */
