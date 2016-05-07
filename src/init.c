@@ -245,6 +245,7 @@ void send_initial_routing_packet(){
 		sendALL(sock, cntrl_response, response_len);
 		*/
 
+		//Reference Beej's Guide Section 6.3
 		int sockfd;
 		struct addrinfo hints, *servinfo, *p;
 		int rv;
@@ -266,21 +267,20 @@ void send_initial_routing_packet(){
 		// loop through all the results and make a socket
 		for(p = servinfo; p != NULL; p = p->ai_next) {
 			if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
-				perror("talker: socket");
+				perror("socket");
 				continue;
 			}
 			break;
 		}
 		if (p == NULL) {
-			fprintf(stderr, "talker: failed to create socket\n");
+			fprintf(stderr, "Failed to create socket\n");
 			return;
 		}
-		if ((numbytes = sendto(sockfd, cntrl_response, response_len, 0, p->ai_addr, p->ai_addrlen)) == -1) {
-			perror("talker: sendto");
-			exit(1);
-		}
+
+		while(numbytes += sendto(sockfd, cntrl_response + numbytes, response_len, 0, p->ai_addr, p->ai_addrlen) < response_len);
+
 		freeaddrinfo(servinfo);
-		printf("talker: sent %d bytes\n", numbytes);
+		printf("Sent %d bytes\n", numbytes);
 		close(sockfd);
 		free(cntrl_response);
 		//close(sock);
