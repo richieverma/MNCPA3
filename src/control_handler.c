@@ -155,6 +155,7 @@ bool control_recv_hook(int sock_index)
     free(cntrl_header);
 
     /* Get control payload */
+    printf("\nPAYLOAD LENGTH %d\n", payload_len);
     if(payload_len != 0){
         cntrl_payload = (char *) malloc(sizeof(char)*payload_len);
         bzero(cntrl_payload, payload_len);
@@ -166,6 +167,7 @@ bool control_recv_hook(int sock_index)
         }
     }
 
+    printf("CONTROL CODE %d SOCKINDEX:%d\n", control_code,sock_index);
     /* Triage on control_code */
     switch(control_code){
         case 0: author_response(sock_index);
