@@ -28,6 +28,8 @@
 #include <arpa/inet.h>
 #include <sys/queue.h>
 #include <unistd.h> // for close
+#include <sys/types.h>
+#include <netdb.h>
 
 #include "../include/global.h"
 #include "../include/control_header_lib.h"
@@ -148,8 +150,7 @@ void init_response(int sock_index, char *cntrl_payload)
         route_table[my_table_id][router_itr->table_id] = router_itr->cost;
     }
 
-    //Send router packet to neighbours
-	send_initial_routing_packet();
+
 
     //SEND RESPONSE FOR INIT
 	uint16_t response_len;
@@ -173,6 +174,8 @@ void init_response(int sock_index, char *cntrl_payload)
 		}
 		printf("\n");
 	}
+    //Send router packet to neighbours
+	send_initial_routing_packet();	
 
 }
 
@@ -216,18 +219,20 @@ void send_initial_routing_packet(){
 		free(cntrl_response_header);
 		/* Copy Payload */
 		memcpy(cntrl_response+CNTRL_RESP_HEADER_SIZE, cntrl_response_payload, payload_len);
-		free(cntrl_response_payload);
+		
 
 		//CREATE SOCKET TO SEND INFO
+		/*
 	    int sock;
 	    struct sockaddr_in control_addr;
 	    socklen_t addrlen = sizeof(control_addr);
 
 	    sock = socket(AF_INET, SOCK_DGRAM, 0);
 	    if(sock < 0)
-	        ERROR("socket() failed");
+	        ERROR("socket() failed");*/
 
 	    /* Make socket re-usable */
+	    /*
 	    if(setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (int[]){1}, sizeof(int)) < 0)
 	        ERROR("setsockopt() failed");
 
@@ -238,8 +243,47 @@ void send_initial_routing_packet(){
 	    control_addr.sin_port = htons(my_router_port);
 
 		sendALL(sock, cntrl_response, response_len);
+		*/
 
+		int sockfd;
+		struct addrinfo hints, *servinfo, *p;
+		int rv;
+		int numbytes;
+		char buf[5];
+
+		snprintf(buf,5,"%d",router_itr->router_port);
+		printf("Neighbour PORT: %s bytes\n", buf);
+
+
+		memset(&hints, 0, sizeof hints);
+		hints.ai_family = AF_UNSPEC;
+		hints.ai_socktype = SOCK_DGRAM;
+		//if ((rv = getaddrinfo(router_itr->router_ip, itoa(router_itr->router_port), &hints, &servinfo)) != 0) {
+		if ((rv = getaddrinfo(router_itr->router_ip, buf, &hints, &servinfo)) != 0) {
+			fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+			return;
+		}
+		// loop through all the results and make a socket
+		for(p = servinfo; p != NULL; p = p->ai_next) {
+			if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
+				perror("talker: socket");
+				continue;
+			}
+			break;
+		}
+		if (p == NULL) {
+			fprintf(stderr, "talker: failed to create socket\n");
+			return;
+		}
+		if ((numbytes = sendto(sockfd, cntrl_response, response_len, 0, p->ai_addr, p->ai_addrlen)) == -1) {
+			perror("talker: sendto");
+			exit(1);
+		}
+		freeaddrinfo(servinfo);
+		printf("talker: sent %d bytes\n", numbytes);
+		close(sockfd);
 		free(cntrl_response);
-		close(sock);
+		//close(sock);
 	} 
+	free(cntrl_response_payload);
 }
