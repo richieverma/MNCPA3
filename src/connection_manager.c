@@ -59,13 +59,13 @@ void main_loop()
                     FD_SET(fdaccept, &master_list);
                     if(fdaccept > head_fd) head_fd = fdaccept;
 
-                    printf("New control socket\n");
+                    printf("\n----------------New control socket----------------\n");
                 }
 
                 /* router_socket */
                 else if(sock_index == router_socket){
                     //call handler that will call recvfrom() .....
-                    printf("New router data\n");
+                    printf("\n----------------New router data----------------\n");
                     struct sockaddr_storage their_addr;
                     char *cntrl_header, *payload;
                     socklen_t addr_len;
@@ -85,7 +85,7 @@ void main_loop()
 
                     int payload_length = update_len*12;
                     payload = (char *) malloc(sizeof(char)*payload_length);
-
+                    printf("\nPayload Length: %d\n", payload_length);
                     while (numbytes += recvfrom(sock_index, payload, payload_length + numbytes , 0, (struct sockaddr *)&their_addr, &addr_len) < payload_length);
 
 

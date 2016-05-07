@@ -249,11 +249,11 @@ void send_initial_routing_packet(){
 		int sockfd;
 		struct addrinfo hints, *servinfo, *p;
 		int rv;
-		int numbytes;
+		unsigned numbytes;
 		char buf[5];
 
 		snprintf(buf,5,"%d",router_itr->router_port);
-		printf("Neighbour PORT: %s bytes\n", buf);
+		printf("Neighbour PORT: %s\n", buf);
 
 
 		memset(&hints, 0, sizeof hints);
@@ -277,10 +277,14 @@ void send_initial_routing_packet(){
 			return;
 		}
 
-		while(numbytes += sendto(sockfd, cntrl_response + numbytes, response_len, 0, p->ai_addr, p->ai_addrlen) < response_len);
+		if (numbytes = sendto(sockfd, cntrl_response, response_len, 0, p->ai_addr, p->ai_addrlen) == -1){
+				perror("talker: sendto error");
+			
+			//printf("Sent %d bytes so far. Total to be sent:%d\n", numbytes, response_len);
+		}
 
 		freeaddrinfo(servinfo);
-		printf("Sent %d bytes\n", numbytes);
+		printf("Sent %d bytes in total. Out of:%d\n", numbytes, response_len);
 		close(sockfd);
 		free(cntrl_response);
 		//close(sock);
