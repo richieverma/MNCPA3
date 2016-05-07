@@ -193,7 +193,7 @@ void send_initial_routing_packet(){
 	routing_response = (char *) malloc(response_len);
 
     
-	LIST_FOREACH(router_itr, &router_neighbour_list, neighbour) {
+	LIST_FOREACH(router_itr, &router_list, next) {
 
 
 		// store this IP address in sa:
@@ -236,6 +236,7 @@ void send_initial_routing_packet(){
 		snprintf(buf,5,"%d",router_itr->router_port);
 		printf("Neighbour PORT: %s\n", buf);
 		printf("Size of routing packet: %d\n", response_len);
+		printf("num_update_fields: %d\n", num_update_fields);
 
 		memset(&hints, 0, sizeof hints);
 		hints.ai_family = AF_UNSPEC;
@@ -266,7 +267,7 @@ void send_initial_routing_packet(){
 
 		freeaddrinfo(servinfo);
 		printf("Sent %d bytes in total. Out of:%d\n", numbytes, response_len);
-		close(sockfd);
+		//close(sockfd);
 		//close(sock);
 	} 
 	free(routing_response);

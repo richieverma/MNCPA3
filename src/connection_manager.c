@@ -65,8 +65,8 @@ void main_loop()
                 /* router_socket */
                 else if(sock_index == router_socket){
                     //call handler that will call recvfrom() .....
-                    router_recv_hook(sock_index);
                     printf("\n----------------New router data----------------\n");
+                    router_recv_hook(sock_index);
                 }
 
                 /* data_socket */

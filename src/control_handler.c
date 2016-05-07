@@ -259,25 +259,38 @@ bool control_recv_hook(int sock_index)
 bool router_recv_hook(int sock_index)
 {
     struct sockaddr_storage their_addr;
-    char *cntrl_header, *payload;
     socklen_t addr_len;
-    uint16_t update_len;
-    unsigned numbytes = 0;
-
-    /* Get control header */
-    cntrl_header = (char *) malloc(sizeof(char)*CNTRL_HEADER_SIZE);
-    bzero(cntrl_header, CNTRL_HEADER_SIZE);
-
     addr_len = sizeof their_addr;
-    if (recvfrom(sock_index, cntrl_header, CNTRL_HEADER_SIZE , 0, (struct sockaddr *)&their_addr, &addr_len) == -1) {
-        perror("recvfrom");
-        exit(1);
+
+    char *routing_update, *routing_source, *source_ip;
+    uint16_t num_update_fields, source_router_port;
+    unsigned numbytes = 0, numbytes_source = 0;
+    size_t routing_packet_length = 0;
+
+    //Get the first 8 bytes which contains information about the source 
+    routing_source = (char *)malloc(sizeof(char) * 8);
+    bzero(routing_source, sizeof routing_source);
+    numbytes_source = recvfrom(sock_index, routing_source, 8, 0, (struct sockaddr *)&their_addr, &addr_len);
+    printf("\n Source Bytes received: %d\n", numbytes_source);
+
+    //Get Number of updated fields to calculate size of packet
+    memcpy(&num_update_fields, routing_source, 2);
+    num_update_fields = ntohs(num_update_fields);
+    //memcpy(&num_update_fields, routing_source, 2));
+    printf("\n num_update_fields: %d\n", num_update_fields);
+    memcpy(&source_router_port, routing_source + 2, 2);
+    source_router_port = ntohs(source_router_port);
+    printf("\n source_router_port: %d\n", source_router_port);
+    //memcpy(source_ip, routing_source + 4, 4);
+    
+    routing_packet_length = (12 * num_update_fields);
+    printf("\nCalculated Packet Length: %d\n", routing_packet_length);
+
+    routing_update = (char *) malloc(sizeof(char) * routing_packet_length);
+    
+    while (numbytes != routing_packet_length){
+        printf("\nBytes received: %d\n", numbytes);
+        numbytes += recvfrom(sock_index, routing_update + numbytes, routing_packet_length - numbytes , 0, (struct sockaddr *)&their_addr, &addr_len); 
     }
-    memcpy(&update_len, cntrl_header, sizeof(update_len));
-    int payload_length = update_len*12;
-    payload = (char *) malloc(sizeof(char)*payload_length);
-    printf("\nPayload Length: %d\n", payload_length);
-    while (numbytes += recvfrom(sock_index, payload, payload_length + numbytes , 0, (struct sockaddr *)&their_addr, &addr_len) < payload_length);
-    printf("\nBytes received: %d\n", numbytes);
 
 }
