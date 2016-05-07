@@ -78,7 +78,7 @@ void init_response(int sock_index, char *cntrl_payload)
 	    if (cost == 0){
 	    	my_router_id = router_id;
 	    	my_table_id = no_routers - i - 1;
-	    	
+
 	    }
 
 		memcpy(&ip, cntrl_payload + 12 + (i*12), 4);
@@ -111,7 +111,7 @@ void init_response(int sock_index, char *cntrl_payload)
 	uint16_t response_len;
 	char *cntrl_response_header, *cntrl_response;
 
-	cntrl_response_header = create_response_header(sock_index, 0, 0, 0);
+	cntrl_response_header = create_response_header(sock_index, 1, 0, 0);
 
 	response_len = CNTRL_RESP_HEADER_SIZE;
 	cntrl_response = (char *) malloc(response_len);

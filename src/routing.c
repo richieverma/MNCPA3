@@ -54,11 +54,11 @@ void packi32(unsigned char *buf, unsigned long int i)
     *buf++ = i>>8;  *buf++ = i;
 }
 
-void routing_table_response(int sock_index, char *cntrl_payload)
+void routing_table_response(int sock_index)
 {
 	int i = 0;
 	uint16_t payload_len, response_len;
-	char *cntrl_response_header, *cntrl_response_payload, *cntrl_response, *buf;
+	char *cntrl_response_header, *cntrl_response_payload, *cntrl_response, *buf = (char *)malloc(16);
 
 	payload_len = num_routers*sizeof(uint16_t)*4; // Four fields of 16 bits per router
 	cntrl_response_payload = (char *) malloc(payload_len);
@@ -67,17 +67,17 @@ void routing_table_response(int sock_index, char *cntrl_payload)
         printf("ROUTER_ID:%d ROUTER_PORT:%d DATA_PORT:%d COST:%d ROUTER_IP:%s NEXT_HOP:%d TABLE_ID:%d\n",router_itr->router_id, router_itr->router_port, router_itr->data_port, router_itr->cost, router_itr->router_ip, router_itr->next_hop, router_itr->table_id);
         
         packi16(buf, router_itr->router_id);
-        memcpy(cntrl_response_payload + (i * 16), buf, 2);
+        memcpy(cntrl_response_payload + (i * 8), buf, 2);
         packi16(buf, 0);
-        memcpy(cntrl_response_payload + (i * 16) + 2, buf, 2);
+        memcpy(cntrl_response_payload + (i * 8) + 2, buf, 2);
         packi16(buf, router_itr->next_hop);
-        memcpy(cntrl_response_payload + (i * 16) + 4, buf, 2);
+        memcpy(cntrl_response_payload + (i * 8) + 4, buf, 2);
         packi16(buf, router_itr->cost);
-        memcpy(cntrl_response_payload + (i * 16) + 6, buf, 2);
+        memcpy(cntrl_response_payload + (i * 8) + 6, buf, 2);
         i++;
     }	
 
-	cntrl_response_header = create_response_header(sock_index, 0, 0, payload_len);
+	cntrl_response_header = create_response_header(sock_index, 2, 0, payload_len);
 
 	response_len = CNTRL_RESP_HEADER_SIZE+payload_len;
 	cntrl_response = (char *) malloc(response_len);

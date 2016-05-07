@@ -174,7 +174,7 @@ bool control_recv_hook(int sock_index)
                 break;
         case 1: init_response(sock_index, cntrl_payload);
                 break;
-        case 2: routing_table_response(sock_index, cntrl_payload);
+        case 2: routing_table_response(sock_index);
                 break;
         case 3: update_response(sock_index, cntrl_payload);
                 break;
