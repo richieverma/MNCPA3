@@ -33,6 +33,7 @@
 #include "../include/network_util.h"
 #include "../include/init.h"
 #include "../include/routing.h"
+ #include "../include/connection_manager.h"
 
 #define INF 65535
 
@@ -77,6 +78,7 @@ void init_response(int sock_index, char *cntrl_payload)
 	    if (cost == 0){
 	    	my_router_id = router_id;
 	    	my_table_id = no_routers - i - 1;
+	    	
 	    }
 
 		memcpy(&ip, cntrl_payload + 12 + (i*12), 4);

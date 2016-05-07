@@ -24,6 +24,8 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <ctype.h>
+#include <stdarg.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -33,24 +35,45 @@
 #include "../include/control_header_lib.h"
 #include "../include/network_util.h"
 #include "../include/init.h"
-#include "../include/routing.h"
+#include "../include/routing.h" 
+
+/*
+** packi16() -- store a 16-bit int into a char buffer (like htons())
+*/ 
+void packi16(unsigned char *buf, unsigned int i)
+{
+    *buf++ = i>>8; *buf++ = i;
+}
+
+/*
+** packi32() -- store a 32-bit int into a char buffer (like htonl())
+*/ 
+void packi32(unsigned char *buf, unsigned long int i)
+{
+    *buf++ = i>>24; *buf++ = i>>16;
+    *buf++ = i>>8;  *buf++ = i;
+}
 
 void routing_table_response(int sock_index, char *cntrl_payload)
 {
 	int i = 0;
 	uint16_t payload_len, response_len;
-	char *cntrl_response_header, *cntrl_response_payload, *cntrl_response;
+	char *cntrl_response_header, *cntrl_response_payload, *cntrl_response, *buf;
 
-	payload_len = num_router*sizeof uint16_t*4; // Four fields of 16 bits per router
+	payload_len = num_routers*sizeof(uint16_t)*4; // Four fields of 16 bits per router
 	cntrl_response_payload = (char *) malloc(payload_len);
 
 	LIST_FOREACH(router_itr, &router_list, next) {	    
         printf("ROUTER_ID:%d ROUTER_PORT:%d DATA_PORT:%d COST:%d ROUTER_IP:%s NEXT_HOP:%d TABLE_ID:%d\n",router_itr->router_id, router_itr->router_port, router_itr->data_port, router_itr->cost, router_itr->router_ip, router_itr->next_hop, router_itr->table_id);
         
-        memcpy(cntrl_response_payload + (i * 16), htons(router_itr->router_id), 2);
-        memcpy(cntrl_response_payload + (i * 16) + 2, htons(0), 2);
-        memcpy(cntrl_response_payload + (i * 16) + 4, htons(router_itr->next_hop), 2);
-        memcpy(cntrl_response_payload + (i * 16) + 6, htons(router_itr->cost), 2);
+        packi16(buf, router_itr->router_id);
+        memcpy(cntrl_response_payload + (i * 16), buf, 2);
+        packi16(buf, 0);
+        memcpy(cntrl_response_payload + (i * 16) + 2, buf, 2);
+        packi16(buf, router_itr->next_hop);
+        memcpy(cntrl_response_payload + (i * 16) + 4, buf, 2);
+        packi16(buf, router_itr->cost);
+        memcpy(cntrl_response_payload + (i * 16) + 6, buf, 2);
         i++;
     }	
 
