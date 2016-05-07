@@ -82,6 +82,61 @@ int create_control_sock()
     return sock;
 }
 
+int create_tcp_sock(uint16_t port)
+{
+    int sock;
+    struct sockaddr_in control_addr;
+    socklen_t addrlen = sizeof(control_addr);
+
+    sock = socket(AF_INET, SOCK_STREAM, 0);
+    if(sock < 0)
+        ERROR("socket() failed");
+
+    /* Make socket re-usable */
+    if(setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (int[]){1}, sizeof(int)) < 0)
+        ERROR("setsockopt() failed");
+
+    bzero(&control_addr, sizeof(control_addr));
+
+    control_addr.sin_family = AF_INET;
+    control_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    control_addr.sin_port = htons(port);
+
+    if(bind(sock, (struct sockaddr *)&control_addr, sizeof(control_addr)) < 0)
+        ERROR("bind() failed");
+
+    if(listen(sock, 5) < 0)
+        ERROR("listen() failed");
+
+    return sock;
+}
+
+int create_udp_sock(uint16_t port)
+{
+    int sock;
+    struct sockaddr_in control_addr;
+    socklen_t addrlen = sizeof(control_addr);
+
+    sock = socket(AF_INET, SOCK_DGRAM, 0);
+    if(sock < 0)
+        ERROR("socket() failed");
+
+    /* Make socket re-usable */
+    if(setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (int[]){1}, sizeof(int)) < 0)
+        ERROR("setsockopt() failed");
+
+    bzero(&control_addr, sizeof(control_addr));
+
+    control_addr.sin_family = AF_INET;
+    control_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    control_addr.sin_port = htons(port);
+
+    if(bind(sock, (struct sockaddr *)&control_addr, sizeof(control_addr)) < 0)
+        ERROR("bind() failed");
+
+    return sock;
+}
+
 int new_control_conn(int sock_index)
 {
     int fdaccept, caddr_len;

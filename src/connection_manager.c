@@ -55,12 +55,13 @@ void main_loop()
                     FD_SET(fdaccept, &master_list);
                     if(fdaccept > head_fd) head_fd = fdaccept;
 
-                    printf("New control socket");
+                    printf("New control socket\n");
                 }
 
                 /* router_socket */
                 else if(sock_index == router_socket){
                     //call handler that will call recvfrom() .....
+                    printf("New router data\n");
                 }
 
                 /* data_socket */
