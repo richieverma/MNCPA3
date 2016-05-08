@@ -26,6 +26,8 @@
  #include <sys/socket.h>
  #include <strings.h>
  #include <string.h>
+#include <time.h>
+#include <sys/time.h> 
 
 #include "../include/connection_manager.h"
 #include "../include/global.h"
@@ -65,8 +67,15 @@ void main_loop()
                 /* router_socket */
                 else if(sock_index == router_socket){
                     //call handler that will call recvfrom() .....
+                    struct timeval start, end;
+
+                    gettimeofday(&start, NULL);
+
                     printf("\n----------------New router data----------------\n");
                     router_recv_hook(sock_index);
+                    gettimeofday(&end, NULL);
+
+                    printf("%ld\n", ((end.tv_sec * 1000000 + end.tv_usec) - (start.tv_sec * 1000000 + start.tv_usec)));
                 }
 
                 /* data_socket */

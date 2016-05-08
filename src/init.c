@@ -35,7 +35,7 @@
 #include "../include/control_header_lib.h"
 #include "../include/network_util.h"
 #include "../include/init.h"
-#include "../include/routing.h"
+//#include "../include/routing.h"
 #include "../include/connection_manager.h"
 #include "../include/control_handler.h" 
 
@@ -44,18 +44,80 @@
 extern fd_set master_list;
 extern int head_fd;
 
-unsigned num_routers, route_table[5][5], my_router_id, my_table_id, my_data_port, my_router_port;
-char *my_router_ip;
+extern unsigned num_routers, route_table[5][5];
+extern struct routerInit *me;
 
+extern LIST_HEAD(routerInitHead, routerInit) router_list; 
+extern LIST_HEAD(routerInitNeighbourHead, routerInit) router_neighbour_list; 
+extern LIST_HEAD(routeUpdateList, routerInit) route_update_list; 
 /*
 ** packi16() -- store a 16-bit int into a char buffer (like htons())
 */ 
-extern void packi16(unsigned char *buf, unsigned int i);
+void packi16(unsigned char *buf, unsigned int i)
+{
+    *buf++ = i>>8; *buf++ = i;
+}
 
 /*
 ** packi32() -- store a 32-bit int into a char buffer (like htonl())
 */ 
-extern void packi32(unsigned char *buf, unsigned long int i);
+void packi32(unsigned char *buf, unsigned long int i)
+{
+    *buf++ = i>>24; *buf++ = i>>16;
+    *buf++ = i>>8;  *buf++ = i;
+}
+//Hexdump
+void hexDump (char *desc, void *addr, int len) {
+    int i;
+    unsigned char buff[17];
+    unsigned char *pc = (unsigned char*)addr;
+
+    // Output description if given.
+    if (desc != NULL)
+        printf ("%s:\n", desc);
+
+    if (len == 0) {
+        printf("  ZERO LENGTH\n");
+        return;
+    }
+    if (len < 0) {
+        printf("  NEGATIVE LENGTH: %i\n",len);
+        return;
+    }
+
+    // Process every byte in the data.
+    for (i = 0; i < len; i++) {
+        // Multiple of 16 means new line (with line offset).
+
+        if ((i % 16) == 0) {
+            // Just don't print ASCII for the zeroth line.
+            if (i != 0)
+                printf ("  %s\n", buff);
+
+            // Output the offset.
+            printf ("  %04x ", i);
+        }
+
+        // Now the hex code for the specific character.
+        printf (" %02x", pc[i]);
+
+        // And store a printable ASCII character for later.
+        if ((pc[i] < 0x20) || (pc[i] > 0x7e))
+            buff[i % 16] = '.';
+        else
+            buff[i % 16] = pc[i];
+        buff[(i % 16) + 1] = '\0';
+    }
+
+    // Pad out last line if not exactly 16 characters.
+    while ((i % 16) != 0) {
+        printf ("   ");
+        i++;
+    }
+
+    // And print the final ASCII bit.
+    printf ("  %s\n", buff);
+}
 
 void init_response(int sock_index, char *cntrl_payload)
 {
@@ -74,6 +136,7 @@ void init_response(int sock_index, char *cntrl_payload)
 
     LIST_INIT(&router_list);
     LIST_INIT(&router_neighbour_list);
+    LIST_INIT(&route_update_list);
 
 	printf("ROUTERS:%d UPDATES:%d\n",no_routers, updates_periodic_interval);
 
@@ -109,13 +172,7 @@ void init_response(int sock_index, char *cntrl_payload)
 
 	    //Identify self parameters
 	    if (cost == 0){
-	    	my_router_id = router_id;
-	    	my_table_id = no_routers - i - 1;
-	    	my_data_port = r->data_port;
-	    	my_router_port = r->router_port;
-	    	my_router_ip = (char *)malloc(strlen(router_ip));
-	    	strcpy(my_router_ip,router_ip);
-	    	
+	    	me = r;
 	    	//Initialize data socket
 	    	data_socket = create_tcp_sock(r->data_port);
             /* Add to watched socket list */
@@ -133,7 +190,7 @@ void init_response(int sock_index, char *cntrl_payload)
 	    	LIST_INSERT_HEAD(&router_neighbour_list, r, neighbour); //Add to list of neighbours
 	    }	    
     }
-
+	printf("MY_ID:%d MY_TABLE_ID:%d\n",me->router_id, me->table_id);
     //Initialize all entries of routing table with cost INF
 	for (int i = 0; i < 5; i++) {
 		for (int j = 0; j < 5; j++){
@@ -144,13 +201,13 @@ void init_response(int sock_index, char *cntrl_payload)
 	//Populate Routing table for all routers
 	LIST_FOREACH(router_itr, &router_list, next) {
 		if (router_itr->cost != INF){
-	    	router_itr->next_hop = my_router_id;
+	    	router_itr->next_hop = me->router_id;
 	    }
 	    else{
 	    	router_itr->next_hop = INF;
 	    }	    
         printf("ROUTER_ID:%d ROUTER_PORT:%d DATA_PORT:%d COST:%d ROUTER_IP:%s NEXT_HOP:%d TABLE_ID:%d\n",router_itr->router_id, router_itr->router_port, router_itr->data_port, router_itr->cost, router_itr->router_ip, router_itr->next_hop, router_itr->table_id);
-        route_table[my_table_id][router_itr->table_id] = router_itr->cost;
+        route_table[me->table_id][router_itr->table_id] = router_itr->cost;
     }
 
 
@@ -171,6 +228,7 @@ void init_response(int sock_index, char *cntrl_payload)
 
 	free(cntrl_response); 
 
+	//Print route table
 	for (int i = 0; i < 5; i++) {
 		for (int j = 0; j < 5; j++){
 			printf("%d ", route_table[i][j]);
@@ -183,58 +241,62 @@ void init_response(int sock_index, char *cntrl_payload)
 }
 
 void send_initial_routing_packet(){
-	uint16_t num_update_fields = 0;
-    uint16_t response_len;
+    uint16_t response_len, num_update_fields = 0;
 	char *routing_response, *buf = (char *)malloc(16);
 	struct sockaddr_in sa;
 	char str[INET_ADDRSTRLEN];
 
 	response_len = 8 + num_routers*sizeof(uint16_t)*6; // Four fields of 2 bytes per router, AND 1 field of 4 bytes, 8 bytes for num_update_fields, source router port, source ip address
 	routing_response = (char *) malloc(response_len);
+	bzero(routing_response, sizeof(routing_response));
 
-    
-	LIST_FOREACH(router_itr, &router_list, next) {
-
-
-		// store this IP address in sa:
-		inet_pton(AF_INET, router_itr->router_ip, &(sa.sin_addr));
-		
-		//inet_aton(router_itr->router_ip, buf);
-		memcpy(routing_response + 8 + (num_update_fields * 12), &(sa.sin_addr), sizeof(struct in_addr));
-        packi16(buf, router_itr->router_port);
-        memcpy(routing_response + 8 +  (num_update_fields * 12) + 4, buf, 2);
-        packi16(buf, 0);
-        memcpy(routing_response + 8 +  (num_update_fields * 12) + 6, buf, 2);
-        packi16(buf, router_itr->router_id);
-        memcpy(routing_response + 8 +  (num_update_fields * 12) + 8, buf, 2);
-        packi16(buf, router_itr->cost);
-        memcpy(routing_response + 8 +  (num_update_fields * 12) + 10, buf, 2);			    
-        printf("ROUTER_ID:%d ROUTER_PORT:%d DATA_PORT:%d COST:%d ROUTER_IP:%s NEXT_HOP:%d TABLE_ID:%d\n",router_itr->router_id, router_itr->router_port, router_itr->data_port, router_itr->cost, router_itr->router_ip, router_itr->next_hop, router_itr->table_id);
-        num_update_fields++;
-    } 
-
-    //Number of update fields
-    packi16(buf, num_update_fields);
+	//Number of update fields. Since this is first packet, routing info will be updated for all routers
+    packi16(buf, num_routers);
     memcpy(routing_response, buf, 2);
 
     //Source router port
-	packi16(buf, my_router_port);
+	packi16(buf, me->router_port);
 	memcpy(routing_response + 2, buf, 2);
 
 	//Source Router IP
-	inet_pton(AF_INET, my_router_ip, &(sa.sin_addr));
+	inet_pton(AF_INET, me->router_ip, &(sa.sin_addr));
 	memcpy(routing_response + 4, &(sa.sin_addr), sizeof(struct in_addr));
+    
+	LIST_FOREACH(router_itr, &router_list, next) {
 
+		// store this IP address in sa:
+		inet_pton(AF_INET, router_itr->router_ip, &(sa.sin_addr));
+		memcpy(routing_response + 8 + (num_update_fields * 12), &(sa.sin_addr), sizeof(struct in_addr));
+
+        packi16(buf, router_itr->router_port);
+        memcpy(routing_response + 8 +  (num_update_fields * 12) + 4, buf, 2);
+        
+        packi16(buf, 0);
+        memcpy(routing_response + 8 +  (num_update_fields * 12) + 6, buf, 2);
+        
+        packi16(buf, router_itr->router_id);
+        memcpy(routing_response + 8 +  (num_update_fields * 12) + 8, buf, 2);
+        
+        packi16(buf, router_itr->cost);
+        memcpy(routing_response + 8 +  (num_update_fields * 12) + 10, buf, 2);			    
+        
+        printf("ROUTER_ID:%d ROUTER_PORT:%d DATA_PORT:%d COST:%d ROUTER_IP:%s NEXT_HOP:%d TABLE_ID:%d\n",router_itr->router_id, router_itr->router_port, router_itr->data_port, router_itr->cost, router_itr->router_ip, router_itr->next_hop, router_itr->table_id);
+        num_update_fields++;
+    } 
+    free(buf);
+    //hexDump ("ROUTER UPDATE 60 BYTES:", routing_response, response_len);
+    sleep(me->table_id);
+    
     LIST_FOREACH(router_itr, &router_neighbour_list, neighbour) {
 		//Reference Beej's Guide Section 6.3
 		int sockfd;
 		struct addrinfo hints, *servinfo, *p;
 		int rv;
 		unsigned numbytes;
-		char buf[5];
+		char nbuf[5];
 
-		snprintf(buf,5,"%d",router_itr->router_port);
-		printf("Neighbour PORT: %s\n", buf);
+		snprintf(nbuf,5,"%d",router_itr->router_port);
+		printf("Neighbour PORT: %s\n", nbuf);
 		printf("Size of routing packet: %d\n", response_len);
 		printf("num_update_fields: %d\n", num_update_fields);
 
@@ -242,7 +304,7 @@ void send_initial_routing_packet(){
 		hints.ai_family = AF_UNSPEC;
 		hints.ai_socktype = SOCK_DGRAM;
 		//if ((rv = getaddrinfo(router_itr->router_ip, itoa(router_itr->router_port), &hints, &servinfo)) != 0) {
-		if ((rv = getaddrinfo(router_itr->router_ip, buf, &hints, &servinfo)) != 0) {
+		if ((rv = getaddrinfo(router_itr->router_ip, nbuf, &hints, &servinfo)) != 0) {
 			fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
 			return;
 		}
@@ -267,7 +329,7 @@ void send_initial_routing_packet(){
 
 		freeaddrinfo(servinfo);
 		printf("Sent %d bytes in total. Out of:%d\n", numbytes, response_len);
-		//close(sockfd);
+		close(sockfd);
 		//close(sock);
 	} 
 	free(routing_response);

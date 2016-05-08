@@ -27,6 +27,7 @@
 #include <sys/queue.h>
 #include <unistd.h>
 #include <string.h>
+#include <arpa/inet.h>
 
 #include "../include/global.h"
 #include "../include/network_util.h"
@@ -256,41 +257,42 @@ bool control_recv_hook(int sock_index)
     return TRUE;
 }
 
+extern void hexDump (char *desc, void *addr, int len);
+
 bool router_recv_hook(int sock_index)
 {
     struct sockaddr_storage their_addr;
+    struct in_addr ip;
     socklen_t addr_len;
     addr_len = sizeof their_addr;
 
-    char *routing_update, *routing_source, *source_ip;
+
+    char routing_update[69], *source_ip, *s_ip;
     uint16_t num_update_fields, source_router_port;
     unsigned numbytes = 0, numbytes_source = 0;
-    size_t routing_packet_length = 0;
+    unsigned routing_packet_length = 0;
 
-    //Get the first 8 bytes which contains information about the source 
-    routing_source = (char *)malloc(sizeof(char) * 8);
-    bzero(routing_source, sizeof routing_source);
-    numbytes_source = recvfrom(sock_index, routing_source, 8, 0, (struct sockaddr *)&their_addr, &addr_len);
-    printf("\n Source Bytes received: %d\n", numbytes_source);
+    numbytes = recvfrom(sock_index, routing_update, 69, 0, (struct sockaddr *)&their_addr, &addr_len);  
 
     //Get Number of updated fields to calculate size of packet
-    memcpy(&num_update_fields, routing_source, 2);
+    memcpy(&num_update_fields, routing_update, 2);
     num_update_fields = ntohs(num_update_fields);
-    //memcpy(&num_update_fields, routing_source, 2));
-    printf("\n num_update_fields: %d\n", num_update_fields);
-    memcpy(&source_router_port, routing_source + 2, 2);
-    source_router_port = ntohs(source_router_port);
-    printf("\n source_router_port: %d\n", source_router_port);
-    //memcpy(source_ip, routing_source + 4, 4);
-    
-    routing_packet_length = (12 * num_update_fields);
-    printf("\nCalculated Packet Length: %d\n", routing_packet_length);
 
-    routing_update = (char *) malloc(sizeof(char) * routing_packet_length);
+    memcpy(&source_router_port, routing_update + 2, 2);
+    source_router_port = ntohs(source_router_port);
+
+    memcpy(&ip, routing_update + 4, 4);
+    s_ip = inet_ntoa(ip);
+    source_ip = (char *)malloc(strlen(s_ip));
+    strcpy(source_ip,s_ip); 
     
-    while (numbytes != routing_packet_length){
-        printf("\nBytes received: %d\n", numbytes);
-        numbytes += recvfrom(sock_index, routing_update + numbytes, routing_packet_length - numbytes , 0, (struct sockaddr *)&their_addr, &addr_len); 
-    }
+    //Calculate routing packet length based on number of fields
+    routing_packet_length = (12 * num_update_fields) + 8;
+     
+
+    printf("\nTotal Bytes received: %d\n", numbytes);
+
+    //hexDump("RECEIVED ROUTING UPDATE:",routing_update, routing_packet_length);
+    update_routing_table(source_ip, source_router_port, num_update_fields, routing_update);
 
 }

@@ -11,6 +11,7 @@ struct routerInit{
 	char *router_ip;
 	LIST_ENTRY(routerInit) next;
 	LIST_ENTRY(routerInit) neighbour;
+	LIST_ENTRY(routerInit) update;
 }*router_itr;
 
 void init_response(int sock_index, char *cntrl_payload);
