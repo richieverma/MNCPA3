@@ -35,23 +35,36 @@
 #include "../include/control_header_lib.h"
 
 fd_set master_list, watch_list;
-int head_fd;
+int head_fd, flag_init = 0;
+struct timeval timeout;
+
+extern struct timeval set_new_timeout();
 
 void main_loop()
 {
     int selret, sock_index, fdaccept;
+    timeout.tv_sec = 0;
+    timeout.tv_usec = 0;
 
     while(TRUE){
         watch_list = master_list;
-        selret = select(head_fd+1, &watch_list, NULL, NULL, NULL);
+        printf("TIMEOUT%d\n", timeout.tv_sec);
+        selret = select(head_fd+1, &watch_list, NULL, NULL, &timeout);
 
         if(selret < 0)
             ERROR("select failed.");
 
         /* Loop through file descriptors to check which ones are ready */
+        if (selret == 0 && flag_init != 0){
+            printf("\n----------------TIMEOUT----------------\n");  
+            set_new_timeout();          
+            continue;
+        }
+
         for(sock_index=0; sock_index<=head_fd; sock_index+=1){
 
             if(FD_ISSET(sock_index, &watch_list)){
+                printf("\n----------------Socket:%d----------------\n", sock_index);
 
                 /* control_socket */
                 if(sock_index == control_socket){
@@ -61,7 +74,7 @@ void main_loop()
                     FD_SET(fdaccept, &master_list);
                     if(fdaccept > head_fd) head_fd = fdaccept;
 
-                    printf("\n----------------New control socket----------------\n");
+                    printf("\n----------------New control socket: %d----------------\n", fdaccept);
                 }
 
                 /* router_socket */
@@ -89,7 +102,9 @@ void main_loop()
                         if(!control_recv_hook(sock_index)) FD_CLR(sock_index, &master_list);
                     }
                     //else if isData(sock_index);
-                    else ERROR("Unknown socket index");
+                    else{
+                        printf("---------------ERROR Unknown socket index %d", sock_index);
+                    }
                 }
             }
         }

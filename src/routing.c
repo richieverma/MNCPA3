@@ -33,6 +33,8 @@
 #include <unistd.h> // for close
 #include <sys/types.h>
 #include <netdb.h>
+#include <time.h> //timeval
+#include <sys/time.h> //timeval
 
 #include "../include/global.h"
 #include "../include/control_header_lib.h"
@@ -44,6 +46,12 @@ extern void packi16(unsigned char *buf, unsigned int i);
 extern void packi32(unsigned char *buf, unsigned long int i);
 
 extern struct routerInit *me;
+extern struct timeval timeout;
+
+char *routing_response;
+//extern unsigned updates_periodic_interval;
+
+//extern LIST_HEAD(trackUpdateList, routerInit) track_update_list;
 
 void routing_table_response(int sock_index)
 {
@@ -99,6 +107,10 @@ void update_routing_table(char *source_ip, uint16_t source_router_port, int upda
 	LIST_FOREACH(router_itr, &router_list, next) {	
 		if (router_itr->router_port == source_router_port){
 			sender = router_itr;
+			struct timeval t;
+			gettimeofday(&t, NULL);
+			sender->last_update_time = t;			
+			sender->missed_updates = 0;
 			printf("Source Router Table ID:%d ROUTER_ID:%d IP:%s SOURCE ROUTER PORT:%d\n", sender->table_id, router_itr->router_id, router_itr->router_ip, source_router_port);
 			break;
 		}
@@ -152,16 +164,23 @@ void update_routing_table(char *source_ip, uint16_t source_router_port, int upda
 	}
 }
 
-char * populate_update_routing_packet(uint16_t *response_len){
+void populate_update_routing_packet(uint16_t *response_len){
 
 	uint16_t num_update_fields = 0;
-	char *routing_response, *buf = (char *)malloc(16);
+	char *buf = (char *)malloc(16);
 	struct sockaddr_in sa;
 	char str[INET_ADDRSTRLEN];
-
+/*
 	LIST_FOREACH(router_itr, &route_update_list, update) {
 		num_update_fields++;
 	}
+*/
+	LIST_FOREACH(router_itr, &router_list, next) {
+		printf("ROUTER_ID:%d ROUTER_PORT:%d DATA_PORT:%d COST:%d ROUTER_IP:%s NEXT_HOP:%d TABLE_ID:%d\n",router_itr->router_id, router_itr->router_port, router_itr->data_port, router_itr->cost, router_itr->router_ip, router_itr->next_hop, router_itr->table_id);
+		num_update_fields++;
+	}
+
+	printf("num_update_fields:%d\n",num_update_fields);
 
 	*response_len = 8 + num_update_fields*sizeof(uint16_t)*6; // Four fields of 2 bytes per router, AND 1 field of 4 bytes, 8 bytes for num_update_fields, source router port, source ip address
 	routing_response = (char *) malloc(*response_len);
@@ -179,8 +198,9 @@ char * populate_update_routing_packet(uint16_t *response_len){
 	inet_pton(AF_INET, me->router_ip, &(sa.sin_addr));
 	memcpy(routing_response + 4, &(sa.sin_addr), sizeof(struct in_addr));
     
-	LIST_FOREACH(router_itr, &route_update_list, update) {
-
+	//LIST_FOREACH(router_itr, &route_update_list, update) {
+	num_update_fields = 0;
+	LIST_FOREACH(router_itr, &router_list, next) {
 		// store this IP address in sa:
 		inet_pton(AF_INET, router_itr->router_ip, &(sa.sin_addr));
 		memcpy(routing_response + 8 + (num_update_fields * 12), &(sa.sin_addr), sizeof(struct in_addr));
@@ -202,16 +222,16 @@ char * populate_update_routing_packet(uint16_t *response_len){
     } 
     free(buf);
 
-    while (route_update_list.lh_first != NULL){          /* Delete. */
-    	LIST_REMOVE(route_update_list.lh_first, update);
-    }
-    return routing_response;
+    //while (route_update_list.lh_first != NULL){          /* Delete. */
+    //	LIST_REMOVE(route_update_list.lh_first, update);
+    //}
+    //return routing_response;
 }
 
 void send_update_routing_packet(){
     //hexDump ("ROUTER UPDATE 60 BYTES:", routing_response, response_len);
     uint16_t response_len;
-	char *routing_response = populate_update_routing_packet(&response_len);
+	populate_update_routing_packet(&response_len);
 
     LIST_FOREACH(router_itr, &router_neighbour_list, neighbour) {
 		//Reference Beej's Guide Section 6.3
@@ -255,7 +275,51 @@ void send_update_routing_packet(){
 		freeaddrinfo(servinfo);
 		printf("Sent %d bytes in total. Out of:%d\n", numbytes, response_len);
 		close(sockfd);
+		printf("Sent and socket closed\n");
 		//close(sock);
 	} 
 	free(routing_response);
+}
+
+void set_new_timeout(){
+	struct timeval min, now;
+	int flag = 0;
+	struct routerInit *m;
+
+	LIST_FOREACH(router_itr, &track_update_list, track){
+		printf("Router ID:%d TIME:%ld\n", router_itr->router_id, (router_itr->last_update_time.tv_sec*1000000 + router_itr->last_update_time.tv_usec));
+		if (flag == 0){
+			min.tv_usec = router_itr->last_update_time.tv_usec;
+			min.tv_sec = router_itr->last_update_time.tv_sec;
+			m = router_itr;
+			flag = 1;
+			continue;
+		}
+		if (router_itr->last_update_time.tv_sec*1000000+router_itr->last_update_time.tv_usec < (min.tv_sec*1000000 + min.tv_usec)){
+			min.tv_usec = router_itr->last_update_time.tv_usec;
+			min.tv_sec = router_itr->last_update_time.tv_sec;
+			m = router_itr;
+		}
+	}
+	gettimeofday(&now, NULL);
+	printf("Next update by router:%d\n", m->router_id);
+	unsigned long t;
+	t = updates_periodic_interval - (((now.tv_sec * 1000000) + now.tv_usec) - ((min.tv_sec * 1000000) + min.tv_usec))/1000000;
+	printf("Time remaining:%ld\n", t);
+	timeout.tv_sec = t;
+	t = ((now.tv_sec * 1000000 + now.tv_usec) - (min.tv_sec * 1000000 + min.tv_usec))%1000000;
+	printf("Time remaining usec:%ld\n", t);
+	timeout.tv_usec = t;
+
+	if (m == me){
+		me->last_update_time = now;
+		send_update_routing_packet();		
+	}
+	else{
+		m->last_update_time = now;
+		m->missed_updates += 1;
+	}
+
+
+
 }

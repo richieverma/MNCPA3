@@ -30,6 +30,8 @@
 #include <unistd.h> // for close
 #include <sys/types.h>
 #include <netdb.h>
+#include <time.h> //timeval
+#include <sys/time.h> //timeval
 
 #include "../include/global.h"
 #include "../include/control_header_lib.h"
@@ -42,14 +44,18 @@
 #define INF 65535
 
 extern fd_set master_list;
-extern int head_fd;
+extern int head_fd, flag_init;
 
-extern unsigned num_routers, route_table[5][5];
+extern unsigned num_routers, route_table[5][5], updates_periodic_interval;
 extern struct routerInit *me;
+extern struct timeval timeout;
 
 extern LIST_HEAD(routerInitHead, routerInit) router_list; 
 extern LIST_HEAD(routerInitNeighbourHead, routerInit) router_neighbour_list; 
 extern LIST_HEAD(routeUpdateList, routerInit) route_update_list; 
+extern LIST_HEAD(trackUpdateList, routerInit) track_update_list; 
+
+
 /*
 ** packi16() -- store a 16-bit int into a char buffer (like htons())
 */ 
@@ -121,7 +127,7 @@ void hexDump (char *desc, void *addr, int len) {
 
 void init_response(int sock_index, char *cntrl_payload)
 {
-	unsigned no_routers, updates_periodic_interval, router_id, router_port1, router_port2, cost;
+	unsigned no_routers, router_id, router_port1, router_port2, cost;
 	struct in_addr ip;
 	char *router_ip;
 
@@ -137,6 +143,7 @@ void init_response(int sock_index, char *cntrl_payload)
     LIST_INIT(&router_list);
     LIST_INIT(&router_neighbour_list);
     LIST_INIT(&route_update_list);
+    LIST_INIT(&track_update_list);
 
 	printf("ROUTERS:%d UPDATES:%d\n",no_routers, updates_periodic_interval);
 
@@ -144,6 +151,10 @@ void init_response(int sock_index, char *cntrl_payload)
 
     	//Populate routerInit struct to keep info of all routers
     	struct routerInit *r = (struct routerInit *)malloc(sizeof(struct routerInit));
+
+    	r->last_update_time.tv_sec = 0;
+    	r->last_update_time.tv_usec = 0;
+    	r->missed_updates = 0;
 
 		memcpy(&router_id, cntrl_payload + 4 + (i*12), 2);
 	    router_id = ntohs(router_id);
@@ -185,9 +196,11 @@ void init_response(int sock_index, char *cntrl_payload)
             FD_SET(router_socket, &master_list);
             if(router_socket > head_fd) head_fd = router_socket;
 
+            LIST_INSERT_HEAD(&track_update_list, r, track); //Add self to list of routers to be tracked for routing updates
 	    }
 	    else if (cost != INF){
 	    	LIST_INSERT_HEAD(&router_neighbour_list, r, neighbour); //Add to list of neighbours
+	    	LIST_INSERT_HEAD(&track_update_list, r, track); //Add to list of routers to be tracked for routing updates
 	    }	    
     }
 	printf("MY_ID:%d MY_TABLE_ID:%d\n",me->router_id, me->table_id);
@@ -236,11 +249,11 @@ void init_response(int sock_index, char *cntrl_payload)
 		printf("\n");
 	}
     //Send router packet to neighbours
-	send_initial_routing_packet();	
+	send_initial_routing_packet(updates_periodic_interval);	
 
 }
 
-void send_initial_routing_packet(){
+void send_initial_routing_packet(unsigned updates_periodic_interval){
     uint16_t response_len, num_update_fields = 0;
 	char *routing_response, *buf = (char *)malloc(16);
 	struct sockaddr_in sa;
@@ -285,8 +298,7 @@ void send_initial_routing_packet(){
     } 
     free(buf);
     //hexDump ("ROUTER UPDATE 60 BYTES:", routing_response, response_len);
-    sleep(me->table_id);
-    
+
     LIST_FOREACH(router_itr, &router_neighbour_list, neighbour) {
 		//Reference Beej's Guide Section 6.3
 		int sockfd;
@@ -333,4 +345,10 @@ void send_initial_routing_packet(){
 		//close(sock);
 	} 
 	free(routing_response);
+	struct timeval t;
+	gettimeofday(&t, NULL);
+	me->last_update_time = t;
+	timeout.tv_sec = updates_periodic_interval;
+	flag_init = 1;
+
 }
