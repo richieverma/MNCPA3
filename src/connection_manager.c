@@ -48,7 +48,7 @@ void main_loop()
 
     while(TRUE){
         watch_list = master_list;
-        if (flag_init != 0) printf("TIMEOUT%d\n", timeout.tv_sec);
+        if (flag_init != 0) printf("\nTIME BEFORE NEXT TIMEOUT:%d sec\n", timeout.tv_sec);
         selret = select(head_fd+1, &watch_list, NULL, NULL, &timeout);
 
         if(selret < 0)
@@ -80,15 +80,8 @@ void main_loop()
                 /* router_socket */
                 else if(sock_index == router_socket){
                     //call handler that will call recvfrom() .....
-                    struct timeval start, end;
-
-                    gettimeofday(&start, NULL);
-
                     printf("\n----------------New router data----------------\n");
                     router_recv_hook(sock_index);
-                    gettimeofday(&end, NULL);
-
-                    printf("%ld\n", ((end.tv_sec * 1000000 + end.tv_usec) - (start.tv_sec * 1000000 + start.tv_usec)));
                 }
 
                 /* data_socket */

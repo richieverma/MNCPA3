@@ -46,7 +46,7 @@
 extern fd_set master_list;
 extern int head_fd, flag_init;
 
-extern unsigned num_routers, route_table[5][5], updates_periodic_interval;
+extern unsigned num_routers, route_table[5][5], orig_route_table[5][5], updates_periodic_interval;
 extern struct routerInit *me;
 extern struct timeval timeout;
 
@@ -208,6 +208,7 @@ void init_response(int sock_index, char *cntrl_payload)
 	for (int i = 0; i < 5; i++) {
 		for (int j = 0; j < 5; j++){
 			route_table[i][j] = INF;
+			orig_route_table[i][j] = INF;
 		}
 	}
 
@@ -221,6 +222,7 @@ void init_response(int sock_index, char *cntrl_payload)
 	    }	    
         printf("ROUTER_ID:%d ROUTER_PORT:%d DATA_PORT:%d COST:%d ROUTER_IP:%s NEXT_HOP:%d TABLE_ID:%d\n",router_itr->router_id, router_itr->router_port, router_itr->data_port, router_itr->cost, router_itr->router_ip, router_itr->next_hop, router_itr->table_id);
         route_table[me->table_id][router_itr->table_id] = router_itr->cost;
+        orig_route_table[me->table_id][router_itr->table_id] = router_itr->cost;
     }
 
 

@@ -94,19 +94,59 @@ void routing_table_response(int sock_index)
 
 void update_response(int sock_index, char *cntrl_payload)
 {
+	extern unsigned route_table[5][5], orig_route_table[5][5];
+	unsigned router_id, cost;	
+	struct routerInit *r;
+
+	memcpy(&router_id, cntrl_payload, 2);
+    router_id = ntohs(router_id);
+
+    memcpy(&cost, cntrl_payload + 2, 2);
+    cost = ntohs(updates_periodic_interval);
+
+    //Find router for whih cost has changed
+    LIST_FOREACH(router_itr, &router_list, next) {	
+    	if (router_itr->router_id == router_id){
+    		r = router_itr;
+    		break;
+    	}
+    }
+
+    //Update original route table
+    orig_route_table[me->table_id][r->table_id] = cost;
+
+    //Update cost for all destinations in route table
+    calculate_cost_after_routing_update();
+
+    //Send Control response for UPDATE with no payload
+	uint16_t response_len;
+	char *cntrl_response_header, *cntrl_response;
+
+	cntrl_response_header = create_response_header(sock_index, 3, 0, 0);
+
+	response_len = CNTRL_RESP_HEADER_SIZE;
+	cntrl_response = (char *) malloc(response_len);
+	/* Copy Header */
+	memcpy(cntrl_response, cntrl_response_header, CNTRL_RESP_HEADER_SIZE);
+	free(cntrl_response_header);
+
+	sendALL(sock_index, cntrl_response, response_len);
+
+	free(cntrl_response);
 }
 
 void update_routing_table(char *source_ip, uint16_t source_router_port, int updated_fields, char *routing_update){
 
 	uint16_t router_id, cost, router_table_id;
-	struct routerInit *sender = NULL, *routerCostChange = NULL, *m;
+	struct routerInit *sender = NULL, *m;
 	int flag = 0;
 	long t;
 	struct timeval min, now;
 	gettimeofday(&now, NULL);
 
 	//extern int my_table_id;
-	extern unsigned route_table[5][5];
+	extern unsigned route_table[5][5], orig_route_table[5][5];
+
 
 	//Find table id of router who has sent the update
 	LIST_FOREACH(router_itr, &router_list, next) {	
@@ -157,7 +197,7 @@ void update_routing_table(char *source_ip, uint16_t source_router_port, int upda
 	printf("Time remaining usec:%ld\n", t);
 	timeout.tv_usec = t;
 
-	//Update routing table for every router
+	//Update routing table for every router from sender
 	for (int i = 0; i < updated_fields; i++){
 		memcpy(&router_id, routing_update + 8 +  8 + (i * 12), 2);
 		router_id = ntohs(router_id);
@@ -181,21 +221,39 @@ void update_routing_table(char *source_ip, uint16_t source_router_port, int upda
 		}
 		printf("\n");
 	}
+	calculate_cost_after_routing_update();
+}
 
+void calculate_cost_after_routing_update(){
 	//Calculate change in distance cost to destinations based on the update
-	unsigned original_cost, new_cost;
+	unsigned original_cost, new_cost, min_cost, hop;
+	struct routerInit *router_it, *routerCostChange = NULL;
+
 	for (int i = 0; i < num_routers; i++) {
-		original_cost = route_table[me->table_id][i];
-		new_cost = route_table[me->table_id][sender->table_id] + route_table[sender->table_id][i];
+		original_cost = orig_route_table[me->table_id][i];
+		new_cost = 65535;
+		min_cost = 65535;
+		hop = 65535;
+		//new_cost = route_table[me->table_id][sender->table_id] + route_table[sender->table_id][i];	
+
+		//Find min cost from all neighbours
+		LIST_FOREACH(router_it, &router_neighbour_list, neighbour) {
+			new_cost = orig_route_table[me->table_id][router_it->table_id] + orig_route_table[router_it->table_id][i];	
+			if (new_cost < min_cost){
+				min_cost = new_cost;
+				hop = router_it->router_id;
+			}
+		}
+
+		
 		if ( original_cost > new_cost){
 			//Find the router whose cost has changed
-			LIST_FOREACH(router_itr, &router_list, next) {	
-				if (router_itr->table_id == i){
-					router_itr->cost = new_cost;
-					router_itr->next_hop = sender->router_id;
-					routerCostChange = router_itr;
-					printf("Cost CHANGE Router Table ID:%d ROUTER_ID:%d NEXT HOP:%d COST:%d\n", router_itr->table_id, router_itr->router_id, router_itr->next_hop, router_itr->cost);
-					LIST_INSERT_HEAD(&route_update_list, routerCostChange, update);
+			LIST_FOREACH(router_it, &router_list, next) {	
+				if (router_it->table_id == i){
+					router_it->cost = new_cost;
+					router_it->next_hop = hop;
+					routerCostChange = router_it;
+					printf("Cost CHANGE Router Table ID:%d ROUTER_ID:%d NEXT HOP:%d COST:%d\n", router_it->table_id, router_it->router_id, router_it->next_hop, router_it->cost);
 					break;
 				}
 			}
@@ -323,6 +381,8 @@ void send_update_routing_packet(){
 }
 
 void set_new_timeout(){
+
+	extern unsigned route_table[5][5];
 	struct timeval min, now, next_time;
 	int flag = 0, flag1 = 0, delay = 0;
 	struct routerInit *m;
@@ -352,9 +412,15 @@ void set_new_timeout(){
 				send_update_routing_packet();	
 			}
 			else{
-				printf("Missed update from:%u\n", router_itr->router_id);
+				
 				router_itr->next_update_time = next_time;
 				router_itr->missed_updates += 1;				
+				printf("Missed %d updates from:%u\n",router_itr->missed_updates, router_itr->router_id);
+				if (router_itr->missed_updates == 3){
+					route_table[me->table_id][router_itr->table_id] = 65535;
+					router_itr->next_hop = 65535;
+					calculate_cost_after_routing_update(router_itr);
+				}
 			}
 		}
 	}
@@ -397,6 +463,12 @@ void set_new_timeout(){
 	else{
 		m->next_update_time = next_time;
 		m->missed_updates += 1;
+		printf("Missed %d updates from:%u\n",m->missed_updates, m->router_id);
+		if (m->missed_updates == 3){
+			route_table[me->table_id][m->table_id] = 65535;
+			router_itr->next_hop = 65535;
+			calculate_cost_after_routing_update(m);
+		}
 	}
 
 
