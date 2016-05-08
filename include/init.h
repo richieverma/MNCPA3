@@ -5,7 +5,7 @@
 struct routerInit{
 	unsigned router_id;
 	unsigned missed_updates; 
-	struct timeval last_update_time;
+	struct timeval next_update_time;
 	unsigned router_port;
 	unsigned data_port;
 	unsigned cost;

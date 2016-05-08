@@ -152,8 +152,8 @@ void init_response(int sock_index, char *cntrl_payload)
     	//Populate routerInit struct to keep info of all routers
     	struct routerInit *r = (struct routerInit *)malloc(sizeof(struct routerInit));
 
-    	r->last_update_time.tv_sec = 0;
-    	r->last_update_time.tv_usec = 0;
+    	r->next_update_time.tv_sec = 0;
+    	r->next_update_time.tv_usec = 0;
     	r->missed_updates = 0;
 
 		memcpy(&router_id, cntrl_payload + 4 + (i*12), 2);
@@ -347,7 +347,8 @@ void send_initial_routing_packet(unsigned updates_periodic_interval){
 	free(routing_response);
 	struct timeval t;
 	gettimeofday(&t, NULL);
-	me->last_update_time = t;
+	t.tv_sec += updates_periodic_interval;
+	me->next_update_time = t;
 	timeout.tv_sec = updates_periodic_interval;
 	flag_init = 1;
 

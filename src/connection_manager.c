@@ -48,7 +48,7 @@ void main_loop()
 
     while(TRUE){
         watch_list = master_list;
-        printf("TIMEOUT%d\n", timeout.tv_sec);
+        if (flag_init != 0) printf("TIMEOUT%d\n", timeout.tv_sec);
         selret = select(head_fd+1, &watch_list, NULL, NULL, &timeout);
 
         if(selret < 0)
