@@ -344,9 +344,9 @@ bool control_recv_hook(int sock_index)
                 break;
         case 6: sendfile_stats_response(sock_index, cntrl_payload);
                 break;
-        case 7: last_data_packet_response(sock_index, cntrl_payload);
+        case 7: last_data_packet_response(sock_index);
                 break; 
-        case 8: penultimate_data_packet_response(sock_index, cntrl_payload);
+        case 8: penultimate_data_packet_response(sock_index);
                 break;                                                                 
         /* .......
         case 1: init_response(sock_index, cntrl_payload);

@@ -479,7 +479,7 @@ void set_new_timeout(){
 		printf("SEND PERIODIC ROUTING UPDATE router ID:%d\n", me->router_id);
 		send_update_routing_packet();		
 	}
-	else{
+	else if (m != me){
 		if (already_missed[m->table_id] == 0){
 			m->next_update_time = next_time;
 			m->missed_updates += 1;

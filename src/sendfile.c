@@ -156,7 +156,7 @@ void sendfile_response(int sock_index, char *cntrl_payload, int payload_len)
     	packi16(buf16, seqnum);	
 		memcpy(routing_response + 6, buf16, 2);
 
-		if (to_be_read == 0){
+		if (to_be_read <= 0){
 			//Last packet. Set FIN bit
     		packi32(buf32, 1<<31);	
 			memcpy(routing_response + 8, buf32, 4);			
@@ -211,11 +211,13 @@ void sendfile_response(int sock_index, char *cntrl_payload, int payload_len)
 //CONTROL CODE 6
 void sendfile_stats_response(int sock_index, char *cntrl_payload)
 {
-	uint8_t transfer_id, num_packets, i = 0, ttl = 0;
+	uint8_t transfer_id, num_packets = 0, i = 0, ttl = 0;
 	char *buf16 = (char *)malloc(16);
 	struct sendfileStats *s;
 
 	memcpy(&transfer_id, cntrl_payload, 1);
+
+	//printf("Transfer ID:%d \n", transfer_id);
 
 	LIST_FOREACH(s, &sendfile_stats_list, next){
 		if (s->transfer_id == transfer_id){
@@ -223,20 +225,21 @@ void sendfile_stats_response(int sock_index, char *cntrl_payload)
 			ttl = s->ttl;
 		}
 	}
-
+	//printf("TTL:%d\n", ttl);
 	uint16_t payload_len, response_len;
 	char *cntrl_response_header, *cntrl_response_payload, *cntrl_response;
 
-	payload_len = num_packets * 2;
+	payload_len = 4 + num_packets * 2;
 	cntrl_response_payload = malloc(payload_len);
 
-	memcpy(&transfer_id, cntrl_response_payload, 1);
-	memcpy(&ttl, cntrl_response_payload + 1, 1);
+	memcpy(cntrl_response_payload, &transfer_id, 1);
+	memcpy(cntrl_response_payload + 1, &ttl, 1);
 	packi16(buf16, 0);
 	memcpy(cntrl_response_payload + 2, buf16, 2);
 
 	LIST_FOREACH(s, &sendfile_stats_list, next){
 		if (s->transfer_id == transfer_id){
+			//printf("SEQ:%d\n", s->seq);
 			packi16(buf16, s->seq);
 			memcpy(cntrl_response_payload + 4 + (i * 2), buf16, 2);
 			i++;
@@ -255,20 +258,16 @@ void sendfile_stats_response(int sock_index, char *cntrl_payload)
 	free(cntrl_response_payload);
 
 	sendALL(sock_index, cntrl_response, response_len);
+	//hexDump("SENDFILE STATS", cntrl_response, response_len);
 
 	free(cntrl_response);    
 
 }
 
 //CONTROL CODE 7
-void last_data_packet_response(int sock_index, char *cntrl_payload)
+void last_data_packet_response(int sock_index)
 {
-	uint8_t transfer_id;
 	struct sendfileStats *s;
-
-	//Read transfer_id from control payload
-	memcpy(&transfer_id, cntrl_payload, 1);
-
 	uint16_t payload_len, response_len;
 	char *cntrl_response_header, *cntrl_response_payload, *cntrl_response;
 
@@ -276,10 +275,8 @@ void last_data_packet_response(int sock_index, char *cntrl_payload)
 	cntrl_response_payload = malloc(payload_len);
 
 	LIST_FOREACH(s, &sendfile_stats_list, next){
-		if (s->transfer_id == transfer_id){
-			memcpy(cntrl_response_payload, s->packet, payload_len);
-			break;
-		}
+		memcpy(cntrl_response_payload, s->packet, payload_len);
+		break;
 	}	
 
 	cntrl_response_header = create_response_header(sock_index, 7, 0, payload_len);
@@ -294,20 +291,17 @@ void last_data_packet_response(int sock_index, char *cntrl_payload)
 	free(cntrl_response_payload);
 
 	sendALL(sock_index, cntrl_response, response_len);
+	//hexDump("LAST DATA", cntrl_response, response_len);
 
 	free(cntrl_response); 
 
 }
 
 //CONTROL CODE 8
-void penultimate_data_packet_response(int sock_index, char *cntrl_payload)
+void penultimate_data_packet_response(int sock_index)
 {
-	uint8_t transfer_id, i = 1;
+	uint8_t i = 1;
 	struct sendfileStats *s;
-
-	//Read transfer_id from control payload
-	memcpy(&transfer_id, cntrl_payload, 1);
-
 	uint16_t payload_len, response_len;
 	char *cntrl_response_header, *cntrl_response_payload, *cntrl_response;
 
@@ -315,13 +309,12 @@ void penultimate_data_packet_response(int sock_index, char *cntrl_payload)
 	cntrl_response_payload = malloc(payload_len);
 
 	LIST_FOREACH(s, &sendfile_stats_list, next){
-		if (s->transfer_id == transfer_id){
-			if (i == 2){
-				memcpy(cntrl_response_payload, s->packet, payload_len);
-				break;
-			}
-			i++;
+		if (i == 2){
+			memcpy(cntrl_response_payload, s->packet, payload_len);
+			break;
 		}
+		i++;
+		
 	}	
 
 	cntrl_response_header = create_response_header(sock_index, 7, 0, payload_len);
@@ -336,7 +329,7 @@ void penultimate_data_packet_response(int sock_index, char *cntrl_payload)
 	free(cntrl_response_payload);
 
 	sendALL(sock_index, cntrl_response, response_len);
-
+	//hexDump("PENULTIMATE DATA", cntrl_response, response_len);
 	free(cntrl_response);	
 
 }
