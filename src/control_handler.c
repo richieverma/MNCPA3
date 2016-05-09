@@ -413,8 +413,9 @@ bool data_recv_hook(int sock_index)
     if((nbytes = recvALL(sock_index, packet, 1036)) <= 0){
         //Remove socket
         printf("Socket to be closed\n");
-        remove_data_conn(sock_index);
-        return FALSE;
+        //remove_data_conn(sock_index);
+        //return FALSE;
+        return TRUE;
     }
 
     //Read IP
@@ -426,8 +427,9 @@ bool data_recv_hook(int sock_index)
 
     if (strcmp(dest_ip, "0.0.0.0") == 0){
         printf("Socket to be closed\n");
-        remove_data_conn(sock_index);
-        return FALSE;  
+        //remove_data_conn(sock_index);
+        //return FALSE;  
+        return TRUE;
     }
 
     //Read transfr_id, ttl, seq
@@ -478,9 +480,10 @@ bool data_recv_hook(int sock_index)
 
     //printf("Forward to ROUTER:%d :%s\n",next_hop_router->router_id, packet);
     //Create data socket to send
-    int sockfilesend = create_tcp_conn(next_hop_router->router_ip, next_hop_router->data_port);
+    //int sockfilesend = create_tcp_conn(next_hop_router->router_ip, next_hop_router->data_port);
+    int sockfilesend = dest_data_sockets[next_hop_router->table_id];
     sendALL(sockfilesend, packet, 12+1024);
-    close(sockfilesend);
+    //close(sockfilesend);
 
     //close(sockfilesend); 
     //remove_data_conn(sock_index);

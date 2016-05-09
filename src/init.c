@@ -46,7 +46,7 @@
 extern fd_set master_list;
 extern int head_fd, flag_init;
 
-extern unsigned num_routers, route_table[5][5], orig_route_table[5][5], updates_periodic_interval;
+extern unsigned num_routers, route_table[5][5], orig_route_table[5][5], updates_periodic_interval, dest_data_sockets[5];
 extern struct routerInit *me;
 extern struct timeval timeout;
 
@@ -219,6 +219,7 @@ void init_response(int sock_index, char *cntrl_payload)
             LIST_INSERT_HEAD(&track_update_list, r, track); //Add self to list of routers to be tracked for routing updates
 	    }
 	    else if (cost != INF){
+	    	dest_data_sockets[r->table_id] = create_tcp_conn(r->router_ip, r->data_port);
 	    	LIST_INSERT_HEAD(&router_neighbour_list, r, neighbour); //Add to list of neighbours
 	    	LIST_INSERT_HEAD(&track_update_list, r, track); //Add to list of routers to be tracked for routing updates
 	    }	    
@@ -359,7 +360,7 @@ void send_initial_routing_packet(unsigned updates_periodic_interval){
 		if ((numbytes = sendto(sockfd, routing_response, response_len, 0, p->ai_addr, p->ai_addrlen)) == -1){
 				perror("talker: sendto error");
 			
-			//printf("Sent %d bytes so far. Total to be sent:%d\n", numbytes, response_len);
+			printf("Sent %d bytes so far. Total to be sent:%d\n", numbytes, response_len);
 		}
 
 		freeaddrinfo(servinfo);

@@ -4,7 +4,7 @@ LIST_HEAD(routerInitNeighbourHead, routerInit) router_neighbour_list;
 LIST_HEAD(routeUpdateList, routerInit) route_update_list; 
 LIST_HEAD(trackUpdateList, routerInit) track_update_list; 
 
-unsigned num_routers, route_table[5][5], orig_route_table[5][5], updates_periodic_interval;
+unsigned num_routers, route_table[5][5], orig_route_table[5][5], updates_periodic_interval, dest_data_sockets[5];
 struct routerInit *me;
 
 void routing_table_response(int sock_index);

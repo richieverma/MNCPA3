@@ -44,6 +44,7 @@
 
 extern LIST_HEAD(routerInitHead, routerInit) router_list;
 extern void hexDump (char *desc, void *addr, int len);
+extern unsigned dest_data_sockets[5];
 
 extern void packi16(unsigned char *buf, unsigned int i);
 extern void packi32(unsigned char *buf, unsigned long int i);
@@ -84,7 +85,7 @@ void sendfile_response(int sock_index, char *cntrl_payload, int payload_len)
 	//Find destination router ID
 	struct routerInit *router_itr, *router_itr1;
 	LIST_FOREACH(router_itr, &router_list, next) {
-		//printf("ROUTER_ID:%d DATA_PORT:%d COST:%d ROUTER_IP:%s NEXT_HOP:%d\n",router_itr->router_id, router_itr->data_port, router_itr->cost, router_itr->router_ip, router_itr->next_hop);
+		printf("ROUTER_ID:%d DATA_PORT:%d COST:%d ROUTER_IP:%s NEXT_HOP:%d\n",router_itr->router_id, router_itr->data_port, router_itr->cost, router_itr->router_ip, router_itr->next_hop);
 		if (strcmp(dest_ip, router_itr->router_ip) == 0){
         	printf("DEST MATCH: ROUTER_ID:%d DATA_PORT:%d COST:%d ROUTER_IP:%s NEXT_HOP:%d\n",router_itr->router_id, router_itr->data_port, router_itr->cost, router_itr->router_ip, router_itr->next_hop);
         	destination = router_itr;
@@ -105,24 +106,20 @@ void sendfile_response(int sock_index, char *cntrl_payload, int payload_len)
 	//TODO SEND FILE
 	//Create data socket to send
 	printf("Creating new socket for file transfer to ROUTER:%d\n", next_hop_router->router_id);
-    int sockfilesend = create_tcp_conn(next_hop_router->router_ip, next_hop_router->data_port);
+    //int sockfilesend = create_tcp_conn(next_hop_router->router_ip, next_hop_router->data_port);
+    int sockfilesend = dest_data_sockets[next_hop_router->table_id];
     
-    FILE *fsend;
+    
             
     //READ FILE AND SEND TO THIS SOCKET
-    int f_send = open(filename, O_RDONLY);
+	FILE *fsend = fopen(filename, "r");
 
-    if (f_send < 0){
+    if (fsend == NULL){
     	printf("ERROR. FILE COULD NOT BE OPENED.\n");
     	return;
     }
-
-    struct stat file_stat;
-    fstat(f_send, &file_stat);
-
-    printf("FILESIZE:%d\n",file_stat.st_size);
             
-    int bytes_sent = 0, to_be_sent = file_stat.st_size, to_be_read = file_stat.st_size, bytes_read = 0, send_flg = 1; //Total bytes to be sent
+    int bytes_sent = 0, bytes_read = 0, send_flg = 1; //Total bytes to be sent
 	char buffer[1024], *buf16 = (char *)malloc(16), *buf32 = (char *)malloc(32), *routing_response;
 	struct sockaddr_in sa;
 
@@ -138,9 +135,6 @@ void sendfile_response(int sock_index, char *cntrl_payload, int payload_len)
 
 	//TTL
 	memcpy(routing_response + 5, &ttl, 1);			
-
-	close(f_send);
-	fsend = fopen(filename, "r");
 
 	fread(buffer, 1, 1024, fsend);
 
@@ -165,7 +159,6 @@ void sendfile_response(int sock_index, char *cntrl_payload, int payload_len)
 		//Read from file
     	//memset(buffer, 0, sizeof buffer);
     	bytes_read += 1024;
-        to_be_read -= bytes_read;
 
 		//SEQNUM
     	packi16(buf16, seqnum);	
@@ -186,7 +179,6 @@ void sendfile_response(int sock_index, char *cntrl_payload, int payload_len)
 		
 
 		bytes_sent = sendALL(sockfilesend, routing_response, 12+1024);
-		to_be_sent -= bytes_sent;
 
     	//Add packet for stats
 		struct sendfileStats *s = malloc(sizeof (struct sendfileStats));
@@ -204,7 +196,7 @@ void sendfile_response(int sock_index, char *cntrl_payload, int payload_len)
     }
     printf("FILE SENT\n");
     fclose(fsend);
-    close(sockfilesend);
+    //close(sockfilesend);
 
 
 	//SEND CONTROL RESPONSE WITH CONTROL CODE 5 AFTER LAST PACKET IS SENT
@@ -233,7 +225,7 @@ void sendfile_stats_response(int sock_index, char *cntrl_payload)
 
 	memcpy(&transfer_id, cntrl_payload, 1);
 
-	//printf("Transfer ID:%d \n", transfer_id);
+	printf("Transfer ID:%d \n", transfer_id);
 
 	LIST_FOREACH(s, &sendfile_stats_list, next){
 		if (s->transfer_id == transfer_id){
@@ -241,7 +233,7 @@ void sendfile_stats_response(int sock_index, char *cntrl_payload)
 			ttl = s->ttl;
 		}
 	}
-	//printf("TTL:%d\n", ttl);
+	printf("TTL:%d\n", ttl);
 	uint16_t payload_len, response_len;
 	char *cntrl_response_header, *cntrl_response_payload, *cntrl_response;
 
@@ -255,7 +247,7 @@ void sendfile_stats_response(int sock_index, char *cntrl_payload)
 
 	LIST_FOREACH(s, &sendfile_stats_list, next){
 		if (s->transfer_id == transfer_id){
-			//printf("SEQ:%d\n", s->seq);
+			printf("SEQ:%d\n", s->seq);
 			packi16(buf16, s->seq);
 			memcpy(cntrl_response_payload + 4 + (i * 2), buf16, 2);
 			i++;
