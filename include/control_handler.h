@@ -12,6 +12,6 @@ bool isData(int sock_index);
 bool control_recv_hook(int sock_index);
 bool router_recv_hook(int sock_index);
 bool data_recv_hook(int sock_index);
-void file_data_received(int sock_index, char *payload, uint8_t transfer_id, int fin_bit);
+void file_data_received(int sock_index, char *payload, uint8_t transfer_id, unsigned fin_bit);
 
 #endif

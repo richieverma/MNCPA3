@@ -84,7 +84,7 @@ void sendfile_response(int sock_index, char *cntrl_payload, int payload_len)
 	//Find destination router ID
 	LIST_FOREACH(router_itr, &router_list, next) {
 		if (strcmp(dest_ip, router_itr->router_ip) == 0){
-        	//printf("MATCH: ROUTER_ID:%d DATA_PORT:%d COST:%d ROUTER_IP:%s NEXT_HOP:%d\n",router_itr->router_id, router_itr->data_port, router_itr->cost, router_itr->router_ip, router_itr->next_hop);
+        	printf("DEST MATCH: ROUTER_ID:%d DATA_PORT:%d COST:%d ROUTER_IP:%s NEXT_HOP:%d\n",router_itr->router_id, router_itr->data_port, router_itr->cost, router_itr->router_ip, router_itr->next_hop);
         	destination = router_itr;
         	break;
     	}

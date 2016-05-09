@@ -51,7 +51,7 @@
 #endif
 
 extern long int unpacki32(unsigned char *buf);
-void file_data_received(int sock_index, char *payload, uint8_t transfer_id, int fin_bit);
+void file_data_received(int sock_index, char *payload, uint8_t transfer_id, unsigned fin_bit);
 /* Linked List for active control connections */
 struct ControlConn
 {
@@ -396,7 +396,7 @@ bool data_recv_hook(int sock_index)
     char packet[1036], *dest_ip, *dip, fin[32], payload[1024];
     uint8_t ttl, transfer_id;
     uint16_t seq;
-    int nbytes = 0, fin_bit = 0;
+    unsigned nbytes = 0, fin_bit = 0;
     struct in_addr ip;
 
     memset(packet, 0, sizeof packet);
@@ -429,6 +429,7 @@ bool data_recv_hook(int sock_index)
         //File for me
         memcpy(fin, packet + 8, 4);  
         memcpy(payload, packet + 12, 1024); 
+        printf("FINBIT:%s, unpack:%d, shift:%d\n", fin, unpacki32(fin), unpacki32(fin)>>31);
         fin_bit = unpacki32(fin)>>31;
         file_data_received(sock_index, payload, transfer_id, fin_bit);
         return TRUE;
@@ -464,7 +465,7 @@ bool data_recv_hook(int sock_index)
     return TRUE;
 }
 
-void file_data_received(int sock_index, char *payload, uint8_t transfer_id, int fin_bit){
+void file_data_received(int sock_index, char *payload, uint8_t transfer_id, unsigned fin_bit){
     printf("FILE FOR ME FINBIT:%d\n", fin_bit);
     struct fileHandle *fh = NULL, *itr;
     FILE *f;
@@ -488,12 +489,20 @@ void file_data_received(int sock_index, char *payload, uint8_t transfer_id, int 
         fh->isopen = TRUE;
         LIST_INSERT_HEAD(&file_handle_list, fh, next);
     }
-    printf("WRITE TO FILE:&s\n", payload);
+    printf("WRITE TO FILE:%s\n", payload);
     fwrite(payload, sizeof(char), 1024, fh->f);
 
-    if (fin_bit == 1){
+    if (fin_bit != 0){
         fh->isopen = FALSE;
         fclose(fh->f);
     }
+
+    if(fh->isopen){
+        printf("FILE NOT CLOSED YET\n");
+    }
+    else{
+        printf("FILE CLOSED. TRANSFER COMPLETE\n");
+    }
+
 
 }
