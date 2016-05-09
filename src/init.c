@@ -55,6 +55,7 @@ extern LIST_HEAD(routerInitNeighbourHead, routerInit) router_neighbour_list;
 extern LIST_HEAD(routeUpdateList, routerInit) route_update_list; 
 extern LIST_HEAD(trackUpdateList, routerInit) track_update_list; 
 extern LIST_HEAD(sendfileStatsList, sendfileStats) sendfile_stats_list;
+extern LIST_HEAD(fileHandleList, fileHandle) file_handle_list;
 
 /*
 ** packi16() -- store a 16-bit int into a char buffer (like htons())
@@ -72,6 +73,23 @@ void packi32(unsigned char *buf, unsigned long int i)
     *buf++ = i>>24; *buf++ = i>>16;
     *buf++ = i>>8;  *buf++ = i;
 }
+
+/*
+** unpacki32() -- unpack a 32-bit int from a char buffer (like ntohl())
+*/
+long int unpacki32(unsigned char *buf)
+{
+unsigned long int i2 = ((unsigned long int)buf[0]<<24) |
+((unsigned long int)buf[1]<<16) |
+((unsigned long int)buf[2]<<8) |
+buf[3];
+long int i;
+// change unsigned numbers to signed
+if (i2 <= 0x7fffffffu) { i = i2; }
+else { i = -1 - (long int)(0xffffffffu - i2); }
+return i;
+}
+
 //Hexdump
 void hexDump (char *desc, void *addr, int len) {
     int i;
@@ -145,6 +163,7 @@ void init_response(int sock_index, char *cntrl_payload)
     LIST_INIT(&route_update_list);
     LIST_INIT(&track_update_list);
     LIST_INIT(&sendfile_stats_list);
+    LIST_INIT(&file_handle_list);
 
 	printf("ROUTERS:%d UPDATES:%d\n",no_routers, updates_periodic_interval);
 

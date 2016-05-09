@@ -50,6 +50,8 @@
     #define CNTRL_PAYLOAD_LEN_OFFSET 0x06
 #endif
 
+extern long int unpacki32(unsigned char *buf);
+void file_data_received(int sock_index, char *payload, uint8_t transfer_id, int fin_bit);
 /* Linked List for active control connections */
 struct ControlConn
 {
@@ -391,16 +393,17 @@ bool router_recv_hook(int sock_index)
 
 bool data_recv_hook(int sock_index)
 {
-    char packet[1036], *dest_ip, *dip;
+    char packet[1036], *dest_ip, *dip, fin[32], payload[1024];
     uint8_t ttl, transfer_id;
     uint16_t seq;
-    int nbytes = 0;
+    int nbytes = 0, fin_bit = 0;
     struct in_addr ip;
 
     memset(packet, 0, sizeof packet);
 
     //Socket closed
     if((nbytes = recvALL(sock_index, packet, 1036)) <= 0){
+        //Remove socket
         remove_data_conn(sock_index);
         return FALSE;
     }
@@ -411,8 +414,23 @@ bool data_recv_hook(int sock_index)
     dest_ip = (char *)malloc(strlen(dip));
     strcpy(dest_ip,dip);
 
+    //Set new ttl to packet and add it to list of packets sent for this transfer id
+    ttl -= 1;
+    memcpy(packet + 5, &ttl, 1);  
+    struct sendfileStats *s = malloc(sizeof (struct sendfileStats));
+    s->ttl = ttl;
+    s->transfer_id = transfer_id;
+    s->seq = seq;
+    strcpy(s->packet, packet);
+    LIST_INSERT_HEAD(&sendfile_stats_list, s, next);
+
+    //Check if file is for me
     if (strcmp(dest_ip, me->router_ip) == 0){
         //File for me
+        memcpy(fin, packet + 8, 4);  
+        memcpy(payload, packet + 12, 1024); 
+        fin_bit = unpacki32(fin)>>31;
+        file_data_received(sock_index, payload, transfer_id, fin_bit);
         return TRUE;
     }
 
@@ -421,20 +439,12 @@ bool data_recv_hook(int sock_index)
     memcpy(&ttl, packet + 5, 1);
     memcpy(&seq, packet + 6, 2);
     seq = ntohs(seq);
-    ttl -= 1;
+    
 
-    if (ttl == 0){
+    if (ttl <= 0){
+        printf("PACKET DROPPED:%d\n", transfer_id);
         return FALSE;  
     }
-
-    //Set new ttl to packet and add it to list of packets sent for this transfer id
-    memcpy(packet + 5, &ttl, 1);  
-    struct sendfileStats *s = malloc(sizeof (struct sendfileStats));
-    s->ttl = ttl;
-    s->transfer_id = transfer_id;
-    s->seq = seq;
-    strcpy(s->packet, packet);
-    LIST_INSERT_HEAD(&sendfile_stats_list, s, next);
 
     //Find next hop
     struct routerInit *itr, *next_hop_router = NULL;
@@ -445,6 +455,7 @@ bool data_recv_hook(int sock_index)
         }
     }
 
+    printf("Forward to ROUTER:%d\n",next_hop_router->router_id);
     //Create data socket to send
     int sockfilesend = create_tcp_conn(next_hop_router->router_ip, next_hop_router->data_port);
     sendALL(sockfilesend, packet, 12+1024);
@@ -453,4 +464,36 @@ bool data_recv_hook(int sock_index)
     return TRUE;
 }
 
+void file_data_received(int sock_index, char *payload, uint8_t transfer_id, int fin_bit){
+    printf("FILE FOR ME FINBIT:%d\n", fin_bit);
+    struct fileHandle *fh = NULL, *itr;
+    FILE *f;
+    char filename[50];
 
+    LIST_FOREACH(itr, &file_handle_list, next){
+        if (itr->transfer_id == transfer_id){
+            fh = itr;
+            break;
+        }
+    }
+
+    //File does not exist
+    if (fh == NULL){
+        fh = malloc(sizeof (struct fileHandle));
+        fh->transfer_id = transfer_id;
+        snprintf(filename, 50, "file-%d",transfer_id);
+        f = fopen(filename, "w");
+        fh->f = f;
+        fh->socket = sock_index;
+        fh->isopen = TRUE;
+        LIST_INSERT_HEAD(&file_handle_list, fh, next);
+    }
+    printf("WRITE TO FILE:&s\n", payload);
+    fwrite(payload, sizeof(char), 1024, fh->f);
+
+    if (fin_bit == 1){
+        fh->isopen = FALSE;
+        fclose(fh->f);
+    }
+
+}
