@@ -404,18 +404,21 @@ bool data_recv_hook(int sock_index)
     char packet[1036], *dest_ip, *dip, fin[32], payload[1024];
     uint8_t ttl, transfer_id;
     uint16_t seq;
-    unsigned nbytes = 0, fin_bit = 0;
+    unsigned fin_bit = 0;
+    int nbytes = 0;
     struct in_addr ip;
 
     memset(packet, 0, sizeof packet);
 
     //Socket closed
-    if((nbytes = recvALL(sock_index, packet, 1036)) <= 0){
+    nbytes = recvALL(sock_index, packet, 1036);
+    printf("NNNNNBBBBYYYTTTTEEESSS%d\n", nbytes);
+    if(nbytes <= 0){
         //Remove socket
         printf("Socket to be closed\n");
-        //remove_data_conn(sock_index);
-        //return FALSE;
-        return TRUE;
+        remove_data_conn(sock_index);
+        return FALSE;
+        //return TRUE;
     }
 
     //Read IP
@@ -426,10 +429,10 @@ bool data_recv_hook(int sock_index)
     //printf("DATARECVHOOK dest_ip:%s\n", dest_ip);
 
     if (strcmp(dest_ip, "0.0.0.0") == 0){
-        printf("Socket to be closed\n");
+        printf("IP Socket to be %d nbytes %d closed:%s\n",strlen(packet),nbytes, packet);
         //remove_data_conn(sock_index);
         //return FALSE;  
-        return TRUE;
+        return FALSE;
     }
 
     //Read transfr_id, ttl, seq

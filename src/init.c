@@ -219,7 +219,6 @@ void init_response(int sock_index, char *cntrl_payload)
             LIST_INSERT_HEAD(&track_update_list, r, track); //Add self to list of routers to be tracked for routing updates
 	    }
 	    else if (cost != INF){
-	    	dest_data_sockets[r->table_id] = create_tcp_conn(r->router_ip, r->data_port);
 	    	LIST_INSERT_HEAD(&router_neighbour_list, r, neighbour); //Add to list of neighbours
 	    	LIST_INSERT_HEAD(&track_update_list, r, track); //Add to list of routers to be tracked for routing updates
 	    }	    
@@ -330,6 +329,9 @@ void send_initial_routing_packet(unsigned updates_periodic_interval){
 		int rv;
 		unsigned numbytes;
 		char nbuf[5];
+
+		dest_data_sockets[router_itr->table_id] = create_tcp_conn(router_itr->router_ip, router_itr->data_port);
+	    printf("Connection established with %d, socket:%d\n", router_itr->router_id, dest_data_sockets[router_itr->table_id]);
 
 		snprintf(nbuf,5,"%d",router_itr->router_port);
 		printf("Neighbour PORT: %s\n", nbuf);

@@ -50,17 +50,18 @@ extern void packi16(unsigned char *buf, unsigned int i);
 extern void packi32(unsigned char *buf, unsigned long int i);
 
 //SENDFILE CONTROL CODE 5
-void sendfile_response(int sock_index, char *cntrl_payload, int payload_len)
+void sendfile_response(int sock_index, char *cntrl_payload, uint16_t payload_len)
 {
-	printf("\n-------SENDFILE-----------\n");	
+	printf("\n-------SENDFILE %d-----------\n", payload_len);	
+
 	char *dest_ip, *filename, *dip, *dest_port;
-	uint8_t ttl, transfer_id, filename_length;
-	uint16_t seqnum;
+	uint8_t ttl, transfer_id;
+	uint16_t seqnum, filename_length;
 	struct in_addr ip;
 	struct routerInit *destination, *next_hop_router;
 	//FILE *f_send;
 
-	filename_length = payload_len - 8;
+	filename_length = payload_len - 8 + 1;
 	filename = malloc(filename_length);
 	memset(filename, 0, filename_length);
 
@@ -76,9 +77,9 @@ void sendfile_response(int sock_index, char *cntrl_payload, int payload_len)
 	//transfer_id = ntohs(transfer_id);	
 
 	memcpy(&seqnum, cntrl_payload + 6, 2);
-	seqnum = ntohs(seqnum);	
+	seqnum = ntohs(seqnum);
 
-	memcpy(filename, cntrl_payload + 8, filename_length);
+	snprintf(filename, filename_length, "%s", cntrl_payload+8);
 
 	printf("DEST IP:%s TTL:%d TransferID:%d SEQ:%d FILENAME:%s\n",dest_ip, ttl,transfer_id, seqnum, filename);
 
@@ -108,14 +109,18 @@ void sendfile_response(int sock_index, char *cntrl_payload, int payload_len)
 	printf("Creating new socket for file transfer to ROUTER:%d\n", next_hop_router->router_id);
     //int sockfilesend = create_tcp_conn(next_hop_router->router_ip, next_hop_router->data_port);
     int sockfilesend = dest_data_sockets[next_hop_router->table_id];
-    
+    if (sockfilesend <= 0){
+    	sockfilesend = create_tcp_conn(next_hop_router->router_ip, next_hop_router->data_port);
+    	dest_data_sockets[next_hop_router->table_id] = sockfilesend;
+    }
     
             
     //READ FILE AND SEND TO THIS SOCKET
 	FILE *fsend = fopen(filename, "r");
 
     if (fsend == NULL){
-    	printf("ERROR. FILE COULD NOT BE OPENED.\n");
+    	printf("FILENAME:%s\n", filename);
+    	perror("ERROR. FILE COULD NOT BE OPENED.\n");
     	return;
     }
             

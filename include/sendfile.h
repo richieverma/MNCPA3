@@ -21,7 +21,7 @@ struct fileHandle{
 LIST_HEAD(sendfileStatsList, sendfileStats) sendfile_stats_list;
 LIST_HEAD(fileHandleList, fileHandle) file_handle_list;
 
-void sendfile_response(int sock_index, char *cntrl_payload, int payload_len);
+void sendfile_response(int sock_index, char *cntrl_payload, uint16_t payload_len);
 void sendfile_stats_response(int sock_index, char *cntrl_payload);
 void last_data_packet_response(int sock_index);
 void penultimate_data_packet_response(int sock_index);
