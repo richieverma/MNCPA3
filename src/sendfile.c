@@ -40,8 +40,13 @@
 #include "../include/control_handler.h"
 #include "../include/network_util.h"
 #include "../include/init.h"
+ #include "../include/sendfile.h"
 
 extern LIST_HEAD(routerInitHead, routerInit) router_list;
+extern void hexDump (char *desc, void *addr, int len);
+
+extern void packi16(unsigned char *buf, unsigned int i);
+extern void packi32(unsigned char *buf, unsigned long int i);
 
 //SENDFILE CONTROL CODE 5
 void sendfile_response(int sock_index, char *cntrl_payload, int payload_len)
@@ -51,10 +56,12 @@ void sendfile_response(int sock_index, char *cntrl_payload, int payload_len)
 	uint8_t ttl, transfer_id, filename_length;
 	uint16_t seqnum;
 	struct in_addr ip;
-	struct routerInit *destination;
+	struct routerInit *destination, *next_hop_router;
+	//FILE *f_send;
 
 	filename_length = payload_len - 8;
 	filename = malloc(filename_length);
+	memset(filename, 0, filename_length);
 
 	memcpy(&ip, cntrl_payload, 4);
     dip = inet_ntoa(ip);
@@ -77,38 +84,103 @@ void sendfile_response(int sock_index, char *cntrl_payload, int payload_len)
 	//Find destination router ID
 	LIST_FOREACH(router_itr, &router_list, next) {
 		if (strcmp(dest_ip, router_itr->router_ip) == 0){
-        	printf("MATCH: ROUTER_ID:%d DATA_PORT:%d COST:%d ROUTER_IP:%s NEXT_HOP:%d\n",router_itr->router_id, router_itr->data_port, router_itr->cost, router_itr->router_ip, router_itr->next_hop);
+        	//printf("MATCH: ROUTER_ID:%d DATA_PORT:%d COST:%d ROUTER_IP:%s NEXT_HOP:%d\n",router_itr->router_id, router_itr->data_port, router_itr->cost, router_itr->router_ip, router_itr->next_hop);
         	destination = router_itr;
         	break;
     	}
-    }	
+    }
+
+	//Find details of next hop
+	LIST_FOREACH(router_itr, &router_list, next) {
+		if (destination->next_hop == router_itr->router_id){
+        	printf("NEXT HOP MATCH: ROUTER_ID:%d DATA_PORT:%d COST:%d ROUTER_IP:%s NEXT_HOP:%d\n",router_itr->router_id, router_itr->data_port, router_itr->cost, router_itr->router_ip, router_itr->next_hop);
+        	next_hop_router = router_itr;
+        	break;
+    	}
+    }    	
 
 	//TODO SEND FILE
 	//Create data socket to send
-    int sockfilesend = create_tcp_conn(dest_ip, destination->data_port);
+    int sockfilesend = create_tcp_conn(next_hop_router->router_ip, next_hop_router->data_port);
             
             
     //READ FILE AND SEND TO THIS SOCKET
-    int f = open(filename, O_RDONLY);
-    struct stat file_stat;
-    fstat(f, &file_stat);
-    char file_details[50];
-    sprintf(file_details,"<FILE> %d %s",file_stat.st_size, filename);
-            
-    //Send filesize, filename to client
-    send(sockfilesend, file_details, strlen(file_details), 0);
-    usleep(100000);
-            
-    int bytes_sent = 0; // Sent so far
-    int to_be_sent = file_stat.st_size; //Total bytes to be sent
-    off_t offset = 0;
-            
-    /* Keep sending data till there is no data left to be sent ie to_be_sent=0 */
-    while (((bytes_sent = sendfile(sockfilesend, f, &offset, 256)) > 0) && (to_be_sent > 0))
-    {
-        to_be_sent -= bytes_sent;
-    }    
+    int f_send = open(filename, O_RDONLY);
+    if (f_send < 0){
+    	printf("ERROR. FILE COULD NOT BE OPENED.\n");
+    	return;
+    }
 
+    struct stat file_stat;
+    fstat(f_send, &file_stat);
+
+    printf("FILESIZE:%d\n",file_stat.st_size);
+            
+    int bytes_sent = 0, to_be_sent = file_stat.st_size, to_be_read = file_stat.st_size, bytes_read = 0; //Total bytes to be sent
+	char buffer[1024], *buf16 = (char *)malloc(16), *buf32 = (char *)malloc(32), *routing_response;
+	struct sockaddr_in sa;
+
+	routing_response = malloc(12+1024);
+
+	//Populate routing response
+	//Destination Router IP
+	inet_pton(AF_INET, destination->router_ip, &(sa.sin_addr));
+	memcpy(routing_response, &(sa.sin_addr), sizeof(struct in_addr));
+
+	//Transfer ID
+	memcpy(routing_response + 4, &transfer_id, 1);		
+
+	//TTL
+	memcpy(routing_response + 5, &ttl, 1);			
+
+			
+
+    /* Keep sending data till there is no data left to be sent ie to_be_sent=0 */
+    while (to_be_read > 0)
+    {
+
+
+		//Read from file
+    	memset(buffer, 0, sizeof buffer);
+    	bytes_read = read(f_send, buffer, 1024);
+        to_be_read -= bytes_read;
+
+		//SEQNUM
+    	packi16(buf16, seqnum);	
+		memcpy(routing_response + 6, buf16, 2);
+
+		if (to_be_read == 0){
+			//Last packet. Set FIN bit
+    		packi32(buf32, 1<<31);	
+			memcpy(routing_response + 8, buf32, 4);			
+
+		}
+		else{
+    		packi32(buf32, 0);	
+			memcpy(routing_response + 8, buf32, 4);				
+		}
+
+		memcpy(routing_response + 12, buffer, 1024);
+
+		bytes_sent = sendALL(sockfilesend, routing_response, 12+1024);
+		to_be_sent -= bytes_sent;
+
+    	//Add packet for stats
+		struct sendfileStats *s = malloc(sizeof (struct sendfileStats));
+		s->transfer_id = transfer_id;
+		s->ttl = ttl;
+		s->seq = seqnum;
+		strcpy(s->packet, routing_response);
+		LIST_INSERT_HEAD(&sendfile_stats_list, s, next);
+
+		seqnum += 1;
+		hexDump("SENDFILE:",routing_response, 12+1024);
+        printf("SINDING INFO:%s\n", buffer);
+
+    }
+
+    close(f_send);
+    close(sockfilesend);
 
 
 	//SEND CONTROL RESPONSE WITH CONTROL CODE 5 AFTER LAST PACKET IS SENT
@@ -128,14 +200,135 @@ void sendfile_response(int sock_index, char *cntrl_payload, int payload_len)
 	free(cntrl_response);	
 }
 
+//CONTROL CODE 6
 void sendfile_stats_response(int sock_index, char *cntrl_payload)
 {
+	uint8_t transfer_id, num_packets, i = 0, ttl = 0;
+	char *buf16 = (char *)malloc(16);
+	struct sendfileStats *s;
+
+	memcpy(&transfer_id, cntrl_payload, 1);
+
+	LIST_FOREACH(s, &sendfile_stats_list, next){
+		if (s->transfer_id == transfer_id){
+			num_packets++;
+			ttl = s->ttl;
+		}
+	}
+
+	uint16_t payload_len, response_len;
+	char *cntrl_response_header, *cntrl_response_payload, *cntrl_response;
+
+	payload_len = num_packets * 2;
+	cntrl_response_payload = malloc(payload_len);
+
+	memcpy(&transfer_id, cntrl_response_payload, 1);
+	memcpy(&ttl, cntrl_response_payload + 1, 1);
+	packi16(buf16, 0);
+	memcpy(cntrl_response_payload + 2, buf16, 2);
+
+	LIST_FOREACH(s, &sendfile_stats_list, next){
+		if (s->transfer_id == transfer_id){
+			packi16(buf16, s->seq);
+			memcpy(cntrl_response_payload + 4 + (i * 2), buf16, 2);
+			i++;
+		}
+	}	
+
+	cntrl_response_header = create_response_header(sock_index, 6, 0, payload_len);
+
+	response_len = CNTRL_RESP_HEADER_SIZE + payload_len;
+	cntrl_response = (char *) malloc(response_len);
+	/* Copy Header */
+	memcpy(cntrl_response, cntrl_response_header, CNTRL_RESP_HEADER_SIZE);
+	free(cntrl_response_header);
+	/* Copy Payload */
+	memcpy(cntrl_response+CNTRL_RESP_HEADER_SIZE, cntrl_response_payload, payload_len);
+	free(cntrl_response_payload);
+
+	sendALL(sock_index, cntrl_response, response_len);
+
+	free(cntrl_response);    
+
 }
 
+//CONTROL CODE 7
 void last_data_packet_response(int sock_index, char *cntrl_payload)
 {
+	uint8_t transfer_id;
+	struct sendfileStats *s;
+
+	//Read transfer_id from control payload
+	memcpy(&transfer_id, cntrl_payload, 1);
+
+	uint16_t payload_len, response_len;
+	char *cntrl_response_header, *cntrl_response_payload, *cntrl_response;
+
+	payload_len = 1036;
+	cntrl_response_payload = malloc(payload_len);
+
+	LIST_FOREACH(s, &sendfile_stats_list, next){
+		if (s->transfer_id == transfer_id){
+			memcpy(cntrl_response_payload, s->packet, payload_len);
+			break;
+		}
+	}	
+
+	cntrl_response_header = create_response_header(sock_index, 7, 0, payload_len);
+
+	response_len = CNTRL_RESP_HEADER_SIZE + payload_len;
+	cntrl_response = (char *) malloc(response_len);
+	/* Copy Header */
+	memcpy(cntrl_response, cntrl_response_header, CNTRL_RESP_HEADER_SIZE);
+	free(cntrl_response_header);
+	/* Copy Payload */
+	memcpy(cntrl_response+CNTRL_RESP_HEADER_SIZE, cntrl_response_payload, payload_len);
+	free(cntrl_response_payload);
+
+	sendALL(sock_index, cntrl_response, response_len);
+
+	free(cntrl_response); 
+
 }
 
+//CONTROL CODE 8
 void penultimate_data_packet_response(int sock_index, char *cntrl_payload)
 {
+	uint8_t transfer_id, i = 1;
+	struct sendfileStats *s;
+
+	//Read transfer_id from control payload
+	memcpy(&transfer_id, cntrl_payload, 1);
+
+	uint16_t payload_len, response_len;
+	char *cntrl_response_header, *cntrl_response_payload, *cntrl_response;
+
+	payload_len = 1036;
+	cntrl_response_payload = malloc(payload_len);
+
+	LIST_FOREACH(s, &sendfile_stats_list, next){
+		if (s->transfer_id == transfer_id){
+			if (i == 2){
+				memcpy(cntrl_response_payload, s->packet, payload_len);
+				break;
+			}
+			i++;
+		}
+	}	
+
+	cntrl_response_header = create_response_header(sock_index, 7, 0, payload_len);
+
+	response_len = CNTRL_RESP_HEADER_SIZE + payload_len;
+	cntrl_response = (char *) malloc(response_len);
+	/* Copy Header */
+	memcpy(cntrl_response, cntrl_response_header, CNTRL_RESP_HEADER_SIZE);
+	free(cntrl_response_header);
+	/* Copy Payload */
+	memcpy(cntrl_response+CNTRL_RESP_HEADER_SIZE, cntrl_response_payload, payload_len);
+	free(cntrl_response_payload);
+
+	sendALL(sock_index, cntrl_response, response_len);
+
+	free(cntrl_response);	
+
 }

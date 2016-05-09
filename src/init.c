@@ -54,7 +54,7 @@ extern LIST_HEAD(routerInitHead, routerInit) router_list;
 extern LIST_HEAD(routerInitNeighbourHead, routerInit) router_neighbour_list; 
 extern LIST_HEAD(routeUpdateList, routerInit) route_update_list; 
 extern LIST_HEAD(trackUpdateList, routerInit) track_update_list; 
-
+extern LIST_HEAD(sendfileStatsList, sendfileStats) sendfile_stats_list;
 
 /*
 ** packi16() -- store a 16-bit int into a char buffer (like htons())
@@ -144,6 +144,7 @@ void init_response(int sock_index, char *cntrl_payload)
     LIST_INIT(&router_neighbour_list);
     LIST_INIT(&route_update_list);
     LIST_INIT(&track_update_list);
+    LIST_INIT(&sendfile_stats_list);
 
 	printf("ROUTERS:%d UPDATES:%d\n",no_routers, updates_periodic_interval);
 

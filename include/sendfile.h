@@ -4,6 +4,7 @@ struct sendfileStats{
 	uint8_t transfer_id;
 	uint8_t ttl;
 	uint16_t seq;
+	char packet[1036]; 
 	LIST_ENTRY(sendfileStats) next;
 };
 

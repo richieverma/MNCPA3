@@ -391,54 +391,65 @@ bool router_recv_hook(int sock_index)
 
 bool data_recv_hook(int sock_index)
 {
-    char data[1024], token[30];
-    //File
-    int filesize = 0, remain_data = 0;
-    FILE * f_recv;
-    char filename_recv[50], header[30];
-    int nbytes;
+    char packet[1036], *dest_ip, *dip;
+    uint8_t ttl, transfer_id;
+    uint16_t seq;
+    int nbytes = 0;
+    struct in_addr ip;
 
-    if(recv(sock_index, data, 1024, 0) < 0){
+    memset(packet, 0, sizeof packet);
+
+    //Socket closed
+    if((nbytes = recvALL(sock_index, packet, 1036)) <= 0){
         remove_data_conn(sock_index);
         return FALSE;
     }
-    printf("DATA:%s\n",data);
-    sscanf(data, "%s ", token);
 
-    if (strcmp(token, "<FILE>") == 0){
-        char sfsize[30];
-        sscanf(data, "%s %s %[^\r\n]", header, sfsize, filename_recv);
-        filesize = atoi(sfsize); //Total size of file
-        printf("file to be opened: %s with size %d\n", filename_recv, filesize);
-        
-        f_recv = fopen(filename_recv, "w");
-        if (f_recv == NULL)
-        {
-            printf("File could not be opened.\n");
-            return FALSE;
-        }              
-        //printf("file opened\n");
-        remain_data = filesize;
+    //Read IP
+    memcpy(&ip, packet, 4);
+    dip = inet_ntoa(ip);
+    dest_ip = (char *)malloc(strlen(dip));
+    strcpy(dest_ip,dip);
+
+    if (strcmp(dest_ip, me->router_ip) == 0){
+        //File for me
+        return TRUE;
     }
-    else{
-        //Received file contents  
-              
-        if (remain_data > 0){
-            fwrite(data, sizeof(char), nbytes, f_recv);
-            remain_data -= nbytes;
-            //printf("Remaining data: %d\n", remain_data);
-            if (remain_data <= 0){
-                fclose(f_recv);
-            }
-        }    
-        else{
-            //File Transfer complete
-            fclose(f_recv);
-            close(sock_index); // bye!
-            remove_data_conn(sock_index); // remove from master set                
-        } 
 
-    }   
+    //Packet to be forwarded
+    memcpy(&transfer_id, packet + 4, 1);
+    memcpy(&ttl, packet + 5, 1);
+    memcpy(&seq, packet + 6, 2);
+    seq = ntohs(seq);
+    ttl -= 1;
+
+    if (ttl == 0){
+        return FALSE;  
+    }
+
+    //Set new ttl to packet and add it to list of packets sent for this transfer id
+    memcpy(packet + 5, &ttl, 1);  
+    struct sendfileStats *s = malloc(sizeof (struct sendfileStats));
+    s->ttl = ttl;
+    s->transfer_id = transfer_id;
+    s->seq = seq;
+    strcpy(s->packet, packet);
+    LIST_INSERT_HEAD(&sendfile_stats_list, s, next);
+
+    //Find next hop
+    struct routerInit *itr, *next_hop_router = NULL;
+    LIST_FOREACH(itr, &router_list, next){
+        if (strcmp(dest_ip, itr->router_ip) == 0){
+            next_hop_router = itr;
+            break;
+        }
+    }
+
+    //Create data socket to send
+    int sockfilesend = create_tcp_conn(next_hop_router->router_ip, next_hop_router->data_port);
+    sendALL(sockfilesend, packet, 12+1024);
+
+    close(sockfilesend); 
     return TRUE;
 }
 
