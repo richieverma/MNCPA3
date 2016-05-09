@@ -86,6 +86,12 @@ void main_loop()
 
                 /* data_socket */
                 else if(sock_index == data_socket){
+                    printf("\n----------------New router data----------------\n");
+                    fdaccept = new_data_conn(sock_index);
+
+                    /* Add to watched socket list */
+                    FD_SET(fdaccept, &master_list);
+                    if(fdaccept > head_fd) head_fd = fdaccept;                    
                     //new_data_conn(sock_index);
                 }
 
@@ -94,7 +100,9 @@ void main_loop()
                     if(isControl(sock_index)){
                         if(!control_recv_hook(sock_index)) FD_CLR(sock_index, &master_list);
                     }
-                    //else if isData(sock_index);
+                    else if (isData(sock_index)){
+                        if(!data_recv_hook(sock_index)) FD_CLR(sock_index, &master_list);    
+                    }
                     else{
                         printf("---------------ERROR Unknown socket index %d", sock_index);
                     }

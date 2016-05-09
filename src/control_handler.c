@@ -20,14 +20,20 @@
  *
  * Handler for the control plane.
  */
-
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
+
 #include <strings.h>
 #include <sys/queue.h>
 #include <unistd.h>
 #include <string.h>
-#include <arpa/inet.h>
+#include <netdb.h> //struct addrinfo
+#include <errno.h> //errno
+
+#include <sys/sendfile.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 
 #include "../include/global.h"
 #include "../include/network_util.h"
@@ -51,6 +57,13 @@ struct ControlConn
     LIST_ENTRY(ControlConn) next;
 }*connection, *conn_temp;
 LIST_HEAD(ControlConnsHead, ControlConn) control_conn_list;
+
+struct DataConn
+{
+    int sockfd;
+    LIST_ENTRY(DataConn) next;
+}*dataConnection, *data_conn_temp;
+LIST_HEAD(DataConnsHead, DataConn) data_conn_list;
 
 int create_control_sock()
 {
@@ -112,6 +125,49 @@ int create_tcp_sock(uint16_t port)
     return sock;
 }
 
+int create_tcp_conn(char *dest_ip, unsigned dest_port)
+{
+    struct addrinfo hints, *res, *p;
+    void *addr = NULL;
+  
+    char ipstr[INET_ADDRSTRLEN];
+    int status, sockfd;
+  
+    struct sockaddr_in serverAddr;
+    socklen_t addr_size;
+//SOCKET
+  
+    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+    {
+        int errsv = errno;
+        printf("Socket Error: %d\n", errsv);              
+        return -1;
+    }
+  
+/*---- Configure settings of the server address struct ----*/
+  /* Address family = Internet */
+    serverAddr.sin_family = AF_INET;
+  /* Set port number, using htons function to use proper byte order */
+    serverAddr.sin_port = htons(dest_port);
+  /* Set the IP address to desired host to connect to */
+    serverAddr.sin_addr.s_addr = inet_addr(dest_ip);
+  /* Set all bits of the padding field to 0 */
+    memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);    
+    //CONNECT
+/*---- Connect the socket to the server using the address struct ----*/
+  addr_size = sizeof serverAddr;
+
+    if (connect(sockfd, (struct sockaddr *) &serverAddr, addr_size)== -1){
+        int errsv = errno;
+        printf("Connect Error: %d\n", errsv);  
+        close(sockfd);              
+        return -1;
+        //return errsv;
+    }
+   
+    return sockfd;    
+}
+
 int create_udp_sock(uint16_t port)
 {
     int sock;
@@ -170,6 +226,42 @@ bool isControl(int sock_index)
 {
     LIST_FOREACH(connection, &control_conn_list, next)
         if(connection->sockfd == sock_index) return TRUE;
+
+    return FALSE;
+}
+
+int new_data_conn(int sock_index)
+{
+    int fdaccept, caddr_len;
+    struct sockaddr_in remote_controller_addr;
+
+    caddr_len = sizeof(remote_controller_addr);
+    fdaccept = accept(sock_index, (struct sockaddr *)&remote_controller_addr, &caddr_len);
+    if(fdaccept < 0)
+        ERROR("accept() failed");
+
+    /* Insert into list of active control connections */
+    dataConnection = malloc(sizeof(struct ControlConn));
+    dataConnection->sockfd = fdaccept;
+    LIST_INSERT_HEAD(&data_conn_list, dataConnection, next);
+
+    return fdaccept;
+}
+
+void remove_data_conn(int sock_index)
+{
+    LIST_FOREACH(dataConnection, &data_conn_list, next) {
+        if(dataConnection->sockfd == sock_index) LIST_REMOVE(dataConnection, next); // this may be unsafe?
+        free(dataConnection);
+    }
+
+    close(sock_index);
+}
+
+bool isData(int sock_index)
+{
+    LIST_FOREACH(dataConnection, &data_conn_list, next)
+        if(dataConnection->sockfd == sock_index) return TRUE;
 
     return FALSE;
 }
@@ -236,7 +328,7 @@ bool control_recv_hook(int sock_index)
                 break;
         case 4: crash_response(sock_index);
                 break;
-        case 5: sendfile_response(sock_index, cntrl_payload);
+        case 5: sendfile_response(sock_index, cntrl_payload, payload_len);
                 break;
         case 6: sendfile_stats_response(sock_index, cntrl_payload);
                 break;
@@ -296,3 +388,58 @@ bool router_recv_hook(int sock_index)
     update_routing_table(source_ip, source_router_port, num_update_fields, routing_update);
 
 }
+
+bool data_recv_hook(int sock_index)
+{
+    char data[1024], token[30];
+    //File
+    int filesize = 0, remain_data = 0;
+    FILE * f_recv;
+    char filename_recv[50], header[30];
+    int nbytes;
+
+    if(recv(sock_index, data, 1024, 0) < 0){
+        remove_data_conn(sock_index);
+        return FALSE;
+    }
+    printf("DATA:%s\n",data);
+    sscanf(data, "%s ", token);
+
+    if (strcmp(token, "<FILE>") == 0){
+        char sfsize[30];
+        sscanf(data, "%s %s %[^\r\n]", header, sfsize, filename_recv);
+        filesize = atoi(sfsize); //Total size of file
+        printf("file to be opened: %s with size %d\n", filename_recv, filesize);
+        
+        f_recv = fopen(filename_recv, "w");
+        if (f_recv == NULL)
+        {
+            printf("File could not be opened.\n");
+            return FALSE;
+        }              
+        //printf("file opened\n");
+        remain_data = filesize;
+    }
+    else{
+        //Received file contents  
+              
+        if (remain_data > 0){
+            fwrite(data, sizeof(char), nbytes, f_recv);
+            remain_data -= nbytes;
+            //printf("Remaining data: %d\n", remain_data);
+            if (remain_data <= 0){
+                fclose(f_recv);
+            }
+        }    
+        else{
+            //File Transfer complete
+            fclose(f_recv);
+            close(sock_index); // bye!
+            remove_data_conn(sock_index); // remove from master set                
+        } 
+
+    }   
+    return TRUE;
+}
+
+

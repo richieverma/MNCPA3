@@ -251,7 +251,12 @@ void calculate_cost_after_routing_update(){
 			LIST_FOREACH(router_it, &router_list, next) {	
 				if (router_it->table_id == i){
 					router_it->cost = new_cost;
-					router_it->next_hop = hop;
+					if (hop == me->router_id){
+						router_it->next_hop = router_it->router_id;	
+					}
+					else{
+						router_it->next_hop = hop;
+					}
 					routerCostChange = router_it;
 					printf("Cost CHANGE Router Table ID:%d ROUTER_ID:%d NEXT HOP:%d COST:%d\n", router_it->table_id, router_it->router_id, router_it->next_hop, router_it->cost);
 					break;
@@ -342,6 +347,7 @@ void send_update_routing_packet(){
 		unsigned numbytes;
 		char nbuf[5];
 
+		//CREATE UDP SOCKET TO SEND ROUTE UPDATE
 		snprintf(nbuf,5,"%d",router_itr1->router_port);
 		printf("Neighbour PORT: %s\n", nbuf);
 
@@ -415,7 +421,7 @@ void set_new_timeout(){
 				
 				router_itr->next_update_time = next_time;
 				router_itr->missed_updates += 1;				
-				printf("Missed %d updates from:%u\n",router_itr->missed_updates, router_itr->router_id);
+				printf("Timeout passed Missed %d updates from:%u\n",router_itr->missed_updates, router_itr->router_id);
 				if (router_itr->missed_updates == 3){
 					route_table[me->table_id][router_itr->table_id] = 65535;
 					router_itr->next_hop = 65535;

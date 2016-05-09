@@ -215,7 +215,8 @@ void init_response(int sock_index, char *cntrl_payload)
 	//Populate Routing table for all routers
 	LIST_FOREACH(router_itr, &router_list, next) {
 		if (router_itr->cost != INF){
-	    	router_itr->next_hop = me->router_id;
+	    	//router_itr->next_hop = me->router_id;
+	    	router_itr->next_hop = router_itr->router_id;
 	    }
 	    else{
 	    	router_itr->next_hop = INF;
