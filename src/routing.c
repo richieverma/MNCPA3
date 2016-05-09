@@ -102,7 +102,7 @@ void update_response(int sock_index, char *cntrl_payload)
     router_id = ntohs(router_id);
 
     memcpy(&cost, cntrl_payload + 2, 2);
-    cost = ntohs(updates_periodic_interval);
+    cost = ntohs(cost);
 
     //Find router for whih cost has changed
     LIST_FOREACH(router_itr, &router_list, next) {	
@@ -113,6 +113,8 @@ void update_response(int sock_index, char *cntrl_payload)
     }
 
     //Update original route table
+    printf("UPDATE Cost updated for router:%d\n", r->router_id);
+    r->cost = cost;
     orig_route_table[me->table_id][r->table_id] = cost;
     orig_route_table[r->table_id][me->table_id] = cost;
 
@@ -474,6 +476,7 @@ void set_new_timeout(){
 	printf("Time remaining usec:%ld\n", t);
 	timeout.tv_usec = t;
 
+	/*
 	if (m == me && flag1 == 0){
 		me->next_update_time = next_time;
 		printf("SEND PERIODIC ROUTING UPDATE router ID:%d\n", me->router_id);
@@ -492,6 +495,7 @@ void set_new_timeout(){
 			}
 		}
 	}
+	*/
 
 
 
