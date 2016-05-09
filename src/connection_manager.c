@@ -98,9 +98,11 @@ void main_loop()
                 /* Existing connection */
                 else{
                     if(isControl(sock_index)){
+                        printf("\n----------------Control Socket List----------------\n");
                         if(!control_recv_hook(sock_index)) FD_CLR(sock_index, &master_list);
                     }
                     else if (isData(sock_index)){
+                        printf("\n----------------Data Socket List----------------\n");
                         if(!data_recv_hook(sock_index)) FD_CLR(sock_index, &master_list);    
                     }
                     else{

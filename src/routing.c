@@ -114,6 +114,7 @@ void update_response(int sock_index, char *cntrl_payload)
 
     //Update original route table
     orig_route_table[me->table_id][r->table_id] = cost;
+    orig_route_table[r->table_id][me->table_id] = cost;
 
     //Update cost for all destinations in route table
     calculate_cost_after_routing_update();
@@ -212,6 +213,8 @@ void update_routing_table(char *source_ip, uint16_t source_router_port, int upda
 		}
 		printf("Router ID:%d TABLE_ID:%d COST:%d\n", router_id, router_table_id, cost);
 		route_table[sender->table_id][router_table_id] = cost;
+		orig_route_table[sender->table_id][router_table_id] = cost;
+
 	}
 
 	//Updated Route Table

@@ -146,6 +146,10 @@ int create_tcp_conn(char *dest_ip, unsigned dest_port)
         return -1;
     }
   
+    /* Make socket re-usable */
+    if(setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (int[]){1}, sizeof(int)) < 0)
+        ERROR("setsockopt() failed");
+
 /*---- Configure settings of the server address struct ----*/
   /* Address family = Internet */
     serverAddr.sin_family = AF_INET;
@@ -404,6 +408,7 @@ bool data_recv_hook(int sock_index)
     //Socket closed
     if((nbytes = recvALL(sock_index, packet, 1036)) <= 0){
         //Remove socket
+        printf("Socket to be closed\n");
         remove_data_conn(sock_index);
         return FALSE;
     }
@@ -413,6 +418,12 @@ bool data_recv_hook(int sock_index)
     dip = inet_ntoa(ip);
     dest_ip = (char *)malloc(strlen(dip));
     strcpy(dest_ip,dip);
+
+    //Read transfr_id, ttl, seq
+    memcpy(&transfer_id, packet + 4, 1);
+    memcpy(&ttl, packet + 5, 1);
+    memcpy(&seq, packet + 6, 2);
+    seq = ntohs(seq);
 
     //Set new ttl to packet and add it to list of packets sent for this transfer id
     ttl -= 1;
@@ -429,17 +440,10 @@ bool data_recv_hook(int sock_index)
         //File for me
         memcpy(fin, packet + 8, 4);  
         memcpy(payload, packet + 12, 1024); 
-        printf("FINBIT:%s, unpack:%d, shift:%d\n", fin, unpacki32(fin), unpacki32(fin)>>31);
         fin_bit = unpacki32(fin)>>31;
         file_data_received(sock_index, payload, transfer_id, fin_bit);
         return TRUE;
     }
-
-    //Packet to be forwarded
-    memcpy(&transfer_id, packet + 4, 1);
-    memcpy(&ttl, packet + 5, 1);
-    memcpy(&seq, packet + 6, 2);
-    seq = ntohs(seq);
     
 
     if (ttl <= 0){
@@ -456,12 +460,13 @@ bool data_recv_hook(int sock_index)
         }
     }
 
-    printf("Forward to ROUTER:%d\n",next_hop_router->router_id);
+    printf("Forward to ROUTER:%d :%s\n",next_hop_router->router_id, packet);
     //Create data socket to send
     int sockfilesend = create_tcp_conn(next_hop_router->router_ip, next_hop_router->data_port);
     sendALL(sockfilesend, packet, 12+1024);
 
-    close(sockfilesend); 
+    //close(sockfilesend); 
+    remove_data_conn(sock_index);
     return TRUE;
 }
 

@@ -82,7 +82,9 @@ void sendfile_response(int sock_index, char *cntrl_payload, int payload_len)
 	printf("DEST IP:%s TTL:%d TransferID:%d SEQ:%d FILENAME:%s\n",dest_ip, ttl,transfer_id, seqnum, filename);
 
 	//Find destination router ID
+	struct routerInit *router_itr, *router_itr1;
 	LIST_FOREACH(router_itr, &router_list, next) {
+		printf("ROUTER_ID:%d DATA_PORT:%d COST:%d ROUTER_IP:%s NEXT_HOP:%d\n",router_itr->router_id, router_itr->data_port, router_itr->cost, router_itr->router_ip, router_itr->next_hop);
 		if (strcmp(dest_ip, router_itr->router_ip) == 0){
         	printf("DEST MATCH: ROUTER_ID:%d DATA_PORT:%d COST:%d ROUTER_IP:%s NEXT_HOP:%d\n",router_itr->router_id, router_itr->data_port, router_itr->cost, router_itr->router_ip, router_itr->next_hop);
         	destination = router_itr;
@@ -90,17 +92,19 @@ void sendfile_response(int sock_index, char *cntrl_payload, int payload_len)
     	}
     }
 
+
 	//Find details of next hop
-	LIST_FOREACH(router_itr, &router_list, next) {
-		if (destination->next_hop == router_itr->router_id){
-        	printf("NEXT HOP MATCH: ROUTER_ID:%d DATA_PORT:%d COST:%d ROUTER_IP:%s NEXT_HOP:%d\n",router_itr->router_id, router_itr->data_port, router_itr->cost, router_itr->router_ip, router_itr->next_hop);
-        	next_hop_router = router_itr;
+	LIST_FOREACH(router_itr1, &router_list, next) {
+		if (destination->next_hop == router_itr1->router_id){
+        	printf("NEXT HOP MATCH: ROUTER_ID:%d DATA_PORT:%d COST:%d ROUTER_IP:%s NEXT_HOP:%d\n",router_itr1->router_id, router_itr1->data_port, router_itr1->cost, router_itr1->router_ip, router_itr1->next_hop);
+        	next_hop_router = router_itr1;
         	break;
     	}
     }    	
 
 	//TODO SEND FILE
 	//Create data socket to send
+	printf("Creating new socket for file transfer to ROUTER:%d", next_hop_router->router_id);
     int sockfilesend = create_tcp_conn(next_hop_router->router_ip, next_hop_router->data_port);
             
             
