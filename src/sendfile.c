@@ -122,7 +122,7 @@ void sendfile_response(int sock_index, char *cntrl_payload, int payload_len)
 
     printf("FILESIZE:%d\n",file_stat.st_size);
             
-    int bytes_sent = 0, to_be_sent = file_stat.st_size, to_be_read = file_stat.st_size, bytes_read = 0; //Total bytes to be sent
+    int bytes_sent = 0, to_be_sent = file_stat.st_size, to_be_read = file_stat.st_size, bytes_read = 0, send_flg = 1; //Total bytes to be sent
 	char buffer[1024], *buf16 = (char *)malloc(16), *buf32 = (char *)malloc(32), *routing_response;
 	struct sockaddr_in sa;
 
@@ -142,11 +142,25 @@ void sendfile_response(int sock_index, char *cntrl_payload, int payload_len)
 	close(f_send);
 	fsend = fopen(filename, "r");
 
+	fread(buffer, 1, 1024, fsend);
     /* Keep sending data till there is no data left to be sent ie to_be_sent=0 */
-    while (fread(buffer, sizeof(char), 1024, fsend) == 1024)
+    while (send_flg == 1)
     {
 
+    	memcpy(routing_response + 12, buffer, 1024);
 
+    	if (fread(buffer, 1, 1024, fsend) != 1024){
+    		printf("LAST PACKET SENDING\n");
+    		packi32(buf32, 1<<31);	
+			memcpy(routing_response + 8, buf32, 4);	
+			send_flg = 0;		
+
+		}
+		else{
+    		packi32(buf32, 0);	
+			memcpy(routing_response + 8, buf32, 4);				
+		
+    	}
 		//Read from file
     	//memset(buffer, 0, sizeof buffer);
     	bytes_read += 1024;
@@ -155,9 +169,10 @@ void sendfile_response(int sock_index, char *cntrl_payload, int payload_len)
 		//SEQNUM
     	packi16(buf16, seqnum);	
 		memcpy(routing_response + 6, buf16, 2);
-
+/*
 		if (to_be_read <= 0){
 			//Last packet. Set FIN bit
+			printf("LAST PACKET SENDING\n");
     		packi32(buf32, 1<<31);	
 			memcpy(routing_response + 8, buf32, 4);			
 
@@ -165,9 +180,9 @@ void sendfile_response(int sock_index, char *cntrl_payload, int payload_len)
 		else{
     		packi32(buf32, 0);	
 			memcpy(routing_response + 8, buf32, 4);				
-		}
+		}*/
 
-		memcpy(routing_response + 12, buffer, 1024);
+		
 
 		bytes_sent = sendALL(sockfilesend, routing_response, 12+1024);
 		to_be_sent -= bytes_sent;
@@ -183,7 +198,7 @@ void sendfile_response(int sock_index, char *cntrl_payload, int payload_len)
 		seqnum += 1;
 		//hexDump("SENDFILE:",routing_response, 12+1024);
         //printf("SENDING INFO:%s\n", buffer);
-        //printf("SENDING FILE, BYTES LEFT:%d\n", to_be_sent);
+        printf("SENDING FILE, BYTES SENT:%d\n", bytes_sent);
 
     }
     printf("FILE SENT\n");

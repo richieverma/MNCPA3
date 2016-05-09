@@ -476,6 +476,7 @@ bool data_recv_hook(int sock_index)
     //Create data socket to send
     int sockfilesend = create_tcp_conn(next_hop_router->router_ip, next_hop_router->data_port);
     sendALL(sockfilesend, packet, 12+1024);
+    close(sockfilesend);
 
     //close(sockfilesend); 
     //remove_data_conn(sock_index);
