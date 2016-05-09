@@ -104,12 +104,14 @@ void sendfile_response(int sock_index, char *cntrl_payload, int payload_len)
 
 	//TODO SEND FILE
 	//Create data socket to send
-	printf("Creating new socket for file transfer to ROUTER:%d", next_hop_router->router_id);
+	printf("Creating new socket for file transfer to ROUTER:%d\n", next_hop_router->router_id);
     int sockfilesend = create_tcp_conn(next_hop_router->router_ip, next_hop_router->data_port);
-            
+    
+    FILE *fsend;
             
     //READ FILE AND SEND TO THIS SOCKET
     int f_send = open(filename, O_RDONLY);
+
     if (f_send < 0){
     	printf("ERROR. FILE COULD NOT BE OPENED.\n");
     	return;
@@ -137,16 +139,17 @@ void sendfile_response(int sock_index, char *cntrl_payload, int payload_len)
 	//TTL
 	memcpy(routing_response + 5, &ttl, 1);			
 
-			
+	close(f_send);
+	fsend = fopen(filename, "r");
 
     /* Keep sending data till there is no data left to be sent ie to_be_sent=0 */
-    while (to_be_read > 0)
+    while (fread(buffer, sizeof(char), 1024, fsend) == 1024)
     {
 
 
 		//Read from file
-    	memset(buffer, 0, sizeof buffer);
-    	bytes_read = read(f_send, buffer, 1024);
+    	//memset(buffer, 0, sizeof buffer);
+    	bytes_read += 1024;
         to_be_read -= bytes_read;
 
 		//SEQNUM
@@ -178,12 +181,13 @@ void sendfile_response(int sock_index, char *cntrl_payload, int payload_len)
 		LIST_INSERT_HEAD(&sendfile_stats_list, s, next);
 
 		seqnum += 1;
-		hexDump("SENDFILE:",routing_response, 12+1024);
-        printf("SINDING INFO:%s\n", buffer);
+		//hexDump("SENDFILE:",routing_response, 12+1024);
+        //printf("SENDING INFO:%s\n", buffer);
+        //printf("SENDING FILE, BYTES LEFT:%d\n", to_be_sent);
 
     }
-
-    close(f_send);
+    printf("FILE SENT\n");
+    fclose(fsend);
     close(sockfilesend);
 
 

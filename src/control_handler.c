@@ -430,20 +430,22 @@ bool data_recv_hook(int sock_index)
     memcpy(&transfer_id, packet + 4, 1);
     printf("DATARECVHOOK transfer_id:%d\n", transfer_id);
     memcpy(&ttl, packet + 5, 1);
-    printf("DATARECVHOOK ttl:%s\n", ttl);
+    printf("DATARECVHOOK ttl:%d\n", ttl);
     memcpy(&seq, packet + 6, 2);
     seq = ntohs(seq);
-    printf("DATARECVHOOK seq:%s\n", seq);
+    printf("DATARECVHOOK seq:%d\n", seq);
 
     //Set new ttl to packet and add it to list of packets sent for this transfer id
-    ttl -= 1;
-    memcpy(packet + 5, &ttl, 1);  
-    struct sendfileStats *s = malloc(sizeof (struct sendfileStats));
-    s->ttl = ttl;
-    s->transfer_id = transfer_id;
-    s->seq = seq;
-    strcpy(s->packet, packet);
-    LIST_INSERT_HEAD(&sendfile_stats_list, s, next);
+    if (ttl != 0){
+        ttl -= 1;
+        memcpy(packet + 5, &ttl, 1);  
+        struct sendfileStats *s = malloc(sizeof (struct sendfileStats));
+        s->ttl = ttl;
+        s->transfer_id = transfer_id;
+        s->seq = seq;
+        strcpy(s->packet, packet);
+        LIST_INSERT_HEAD(&sendfile_stats_list, s, next);
+    }
 
     //Check if file is for me
     if (strcmp(dest_ip, me->router_ip) == 0){

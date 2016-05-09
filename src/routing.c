@@ -139,7 +139,7 @@ void update_response(int sock_index, char *cntrl_payload)
 void update_routing_table(char *source_ip, uint16_t source_router_port, int updated_fields, char *routing_update){
 
 	uint16_t router_id, cost, router_table_id;
-	struct routerInit *sender = NULL, *m;
+	struct routerInit *sender = NULL, *m, *itr;
 	int flag = 0;
 	long t;
 	struct timeval min, now;
@@ -151,12 +151,13 @@ void update_routing_table(char *source_ip, uint16_t source_router_port, int upda
 
 	//Find table id of router who has sent the update
 	LIST_FOREACH(router_itr, &router_list, next) {	
-		if (router_itr->router_port == source_router_port){
+		//if (router_itr->router_port == source_router_port){
+		if (strcmp(router_itr->router_ip, source_ip) == 0){
 			sender = router_itr;
-			struct timeval t;
-			gettimeofday(&t, NULL);
-			t.tv_sec += updates_periodic_interval;
-			sender->next_update_time = t;			
+			struct timeval tim;
+			gettimeofday(&tim, NULL);
+			tim.tv_sec += updates_periodic_interval;
+			sender->next_update_time = tim;			
 			sender->missed_updates = 0;
 			printf("Source Router Table ID:%d ROUTER_ID:%d IP:%s SOURCE ROUTER PORT:%d\n", sender->table_id, router_itr->router_id, router_itr->router_ip, source_router_port);
 			break;
@@ -164,24 +165,24 @@ void update_routing_table(char *source_ip, uint16_t source_router_port, int upda
 	}
 
 	//Set new timeout
-	LIST_FOREACH(router_itr, &track_update_list, track){
-		printf("Router ID:%d TIME:%ld\n", router_itr->router_id, (router_itr->next_update_time.tv_sec*1000000 + router_itr->next_update_time.tv_usec));
-		if (router_itr->next_update_time.tv_sec == 0 && router_itr->next_update_time.tv_usec == 0){
-			printf("Waiting for first routing packet from router: %d\n", router_itr->router_id);
+	LIST_FOREACH(itr, &track_update_list, track){
+		printf("Router ID:%d TIME:%ld\n", itr->router_id, (itr->next_update_time.tv_sec*1000000 + itr->next_update_time.tv_usec));
+		if (itr->next_update_time.tv_sec == 0 && itr->next_update_time.tv_usec == 0){
+			printf("Waiting for first routing packet from router: %d\n", itr->router_id);
 			continue;
 		}
 
 		if (flag == 0){
-			min.tv_usec = router_itr->next_update_time.tv_usec;
-			min.tv_sec = router_itr->next_update_time.tv_sec;
-			m = router_itr;
+			min.tv_usec = itr->next_update_time.tv_usec;
+			min.tv_sec = itr->next_update_time.tv_sec;
+			m = itr;
 			flag = 1;
 			continue;
 		}
-		if (router_itr->next_update_time.tv_sec*1000000+router_itr->next_update_time.tv_usec < (min.tv_sec*1000000 + min.tv_usec)){
-			min.tv_usec = router_itr->next_update_time.tv_usec;
-			min.tv_sec = router_itr->next_update_time.tv_sec;
-			m = router_itr;
+		if (itr->next_update_time.tv_sec*1000000 + itr->next_update_time.tv_usec < (min.tv_sec*1000000 + min.tv_usec)){
+			min.tv_usec = itr->next_update_time.tv_usec;
+			min.tv_sec = itr->next_update_time.tv_sec;
+			m = itr;
 		}
 	}
 	
@@ -189,6 +190,9 @@ void update_routing_table(char *source_ip, uint16_t source_router_port, int upda
 
 
 	t = (((min.tv_sec * 1000000) + min.tv_usec) - ((now.tv_sec * 1000000) + now.tv_usec))/1000000;
+	if (t < 0){
+		t = 1;
+	}
 	printf("Time remaining t:%ld\n", t);
 	timeout.tv_sec = t;
 	t = (((min.tv_sec * 1000000) + min.tv_usec) - ((now.tv_sec * 1000000) + now.tv_usec)) % 1000000;
@@ -249,11 +253,11 @@ void calculate_cost_after_routing_update(){
 		}
 
 		
-		if ( original_cost > new_cost){
+		if ( original_cost > min_cost){
 			//Find the router whose cost has changed
 			LIST_FOREACH(router_it, &router_list, next) {	
 				if (router_it->table_id == i){
-					router_it->cost = new_cost;
+					router_it->cost = min_cost;
 					if (hop == me->router_id){
 						router_it->next_hop = router_it->router_id;	
 					}
@@ -265,8 +269,8 @@ void calculate_cost_after_routing_update(){
 					break;
 				}
 			}
-			printf("Shorter path available to %dth node via sender. ORIG:%d NEW:%d\n",i,original_cost,new_cost);
-			route_table[me->table_id][i] = new_cost;	
+			printf("Shorter path available to %dth node via sender:%d ORIG:%d NEW:%d\n",i, hop, original_cost,min_cost);
+			route_table[me->table_id][i] = min_cost;	
 		}
 	}
 }
@@ -393,7 +397,7 @@ void set_new_timeout(){
 
 	extern unsigned route_table[5][5];
 	struct timeval min, now, next_time;
-	int flag = 0, flag1 = 0, delay = 0;
+	int flag = 0, flag1 = 0, delay = 0, already_missed[] = {0,0,0,0,0};
 	struct routerInit *m;
 
 	gettimeofday(&now, NULL);
@@ -423,11 +427,14 @@ void set_new_timeout(){
 			else{
 				
 				router_itr->next_update_time = next_time;
-				router_itr->missed_updates += 1;				
+				router_itr->missed_updates += 1;
+				already_missed[router_itr->table_id] = 1;
+
 				printf("Timeout passed Missed %d updates from:%u\n",router_itr->missed_updates, router_itr->router_id);
-				if (router_itr->missed_updates == 3){
-					route_table[me->table_id][router_itr->table_id] = 65535;
+				if (router_itr->missed_updates >= 3){
+					orig_route_table[me->table_id][router_itr->table_id] = 65535;
 					router_itr->next_hop = 65535;
+					LIST_REMOVE(router_itr, track);
 					calculate_cost_after_routing_update(router_itr);
 				}
 			}
@@ -455,6 +462,9 @@ void set_new_timeout(){
 
 
 	t = (((min.tv_sec * 1000000) + min.tv_usec) - ((now.tv_sec * 1000000) + now.tv_usec))/1000000;
+	if (t < 0){
+		t = 1;
+	}	
 	printf("Time remaining t:%ld\n", t);
 	timeout.tv_sec = t;
 	t = (((min.tv_sec * 1000000) + min.tv_usec) - ((now.tv_sec * 1000000) + now.tv_usec)) % 1000000;
@@ -470,13 +480,16 @@ void set_new_timeout(){
 		send_update_routing_packet();		
 	}
 	else{
-		m->next_update_time = next_time;
-		m->missed_updates += 1;
-		printf("Missed %d updates from:%u\n",m->missed_updates, m->router_id);
-		if (m->missed_updates == 3){
-			route_table[me->table_id][m->table_id] = 65535;
-			router_itr->next_hop = 65535;
-			calculate_cost_after_routing_update(m);
+		if (already_missed[m->table_id] == 0){
+			m->next_update_time = next_time;
+			m->missed_updates += 1;
+			printf("Missed %d updates from:%u\n",m->missed_updates, m->router_id);
+			if (m->missed_updates >= 3){
+				orig_route_table[me->table_id][m->table_id] = 65535;
+				m->next_hop = 65535;
+				LIST_REMOVE(m, track);
+				calculate_cost_after_routing_update(m);
+			}
 		}
 	}
 
