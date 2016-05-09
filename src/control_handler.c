@@ -221,8 +221,11 @@ int new_control_conn(int sock_index)
 void remove_control_conn(int sock_index)
 {
     LIST_FOREACH(connection, &control_conn_list, next) {
-        if(connection->sockfd == sock_index) LIST_REMOVE(connection, next); // this may be unsafe?
-        free(connection);
+        if(connection->sockfd == sock_index){
+            LIST_REMOVE(connection, next); // this may be unsafe?
+            free(connection);
+            break;
+        }
     }
 
     close(sock_index);
@@ -257,8 +260,11 @@ int new_data_conn(int sock_index)
 void remove_data_conn(int sock_index)
 {
     LIST_FOREACH(dataConnection, &data_conn_list, next) {
-        if(dataConnection->sockfd == sock_index) LIST_REMOVE(dataConnection, next); // this may be unsafe?
-        free(dataConnection);
+        if(dataConnection->sockfd == sock_index){
+            LIST_REMOVE(dataConnection, next); // this may be unsafe?
+            free(dataConnection);
+            break;
+        }
     }
 
     close(sock_index);
@@ -418,12 +424,16 @@ bool data_recv_hook(int sock_index)
     dip = inet_ntoa(ip);
     dest_ip = (char *)malloc(strlen(dip));
     strcpy(dest_ip,dip);
+    printf("DATARECVHOOK dest_ip:%s\n", dest_ip);
 
     //Read transfr_id, ttl, seq
     memcpy(&transfer_id, packet + 4, 1);
+    printf("DATARECVHOOK transfer_id:%d\n", transfer_id);
     memcpy(&ttl, packet + 5, 1);
+    printf("DATARECVHOOK ttl:%s\n", ttl);
     memcpy(&seq, packet + 6, 2);
     seq = ntohs(seq);
+    printf("DATARECVHOOK seq:%s\n", seq);
 
     //Set new ttl to packet and add it to list of packets sent for this transfer id
     ttl -= 1;
@@ -466,7 +476,7 @@ bool data_recv_hook(int sock_index)
     sendALL(sockfilesend, packet, 12+1024);
 
     //close(sockfilesend); 
-    remove_data_conn(sock_index);
+    //remove_data_conn(sock_index);
     return TRUE;
 }
 
