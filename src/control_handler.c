@@ -315,7 +315,6 @@ bool control_recv_hook(int sock_index)
     free(cntrl_header);
 
     /* Get control payload */
-    printf("PAYLOAD LENGTH %d\n", payload_len);
     if(payload_len != 0){
         cntrl_payload = (char *) malloc(sizeof(char)*payload_len);
         bzero(cntrl_payload, payload_len);
@@ -327,7 +326,6 @@ bool control_recv_hook(int sock_index)
         }
     }
 
-    printf("CONTROL CODE %d SOCKINDEX:%d\n", control_code,sock_index);
     /* Triage on control_code */
     switch(control_code){
         case 0: author_response(sock_index);
@@ -394,7 +392,7 @@ bool router_recv_hook(int sock_index)
     routing_packet_length = (12 * num_update_fields) + 8;
      
 
-    printf("\nTotal Bytes received: %d\n", numbytes);
+    //printf("\nTotal Bytes received: %d\n", numbytes);
 
     //hexDump("RECEIVED ROUTING UPDATE:",routing_update, routing_packet_length);
     update_routing_table(source_ip, source_router_port, num_update_fields, routing_update);
@@ -424,16 +422,22 @@ bool data_recv_hook(int sock_index)
     dip = inet_ntoa(ip);
     dest_ip = (char *)malloc(strlen(dip));
     strcpy(dest_ip,dip);
-    printf("DATARECVHOOK dest_ip:%s\n", dest_ip);
+    //printf("DATARECVHOOK dest_ip:%s\n", dest_ip);
+
+    if (strcmp(dest_ip, "0.0.0.0") == 0){
+        printf("Socket to be closed\n");
+        remove_data_conn(sock_index);
+        return FALSE;  
+    }
 
     //Read transfr_id, ttl, seq
     memcpy(&transfer_id, packet + 4, 1);
-    printf("DATARECVHOOK transfer_id:%d\n", transfer_id);
+    //printf("DATARECVHOOK transfer_id:%d\n", transfer_id);
     memcpy(&ttl, packet + 5, 1);
-    printf("DATARECVHOOK ttl:%d\n", ttl);
+    //printf("DATARECVHOOK ttl:%d\n", ttl);
     memcpy(&seq, packet + 6, 2);
     seq = ntohs(seq);
-    printf("DATARECVHOOK seq:%d\n", seq);
+    //printf("DATARECVHOOK seq:%d\n", seq);
 
     //Set new ttl to packet and add it to list of packets sent for this transfer id
     if (ttl != 0){
@@ -460,7 +464,7 @@ bool data_recv_hook(int sock_index)
 
     if (ttl <= 0){
         printf("PACKET DROPPED:%d\n", transfer_id);
-        return FALSE;  
+        return TRUE;  
     }
 
     //Find next hop
@@ -472,7 +476,7 @@ bool data_recv_hook(int sock_index)
         }
     }
 
-    printf("Forward to ROUTER:%d :%s\n",next_hop_router->router_id, packet);
+    //printf("Forward to ROUTER:%d :%s\n",next_hop_router->router_id, packet);
     //Create data socket to send
     int sockfilesend = create_tcp_conn(next_hop_router->router_ip, next_hop_router->data_port);
     sendALL(sockfilesend, packet, 12+1024);
@@ -484,7 +488,7 @@ bool data_recv_hook(int sock_index)
 }
 
 void file_data_received(int sock_index, char *payload, uint8_t transfer_id, unsigned fin_bit){
-    printf("FILE FOR ME FINBIT:%d\n", fin_bit);
+    //printf("FILE FOR ME FINBIT:%d\n", fin_bit);
     struct fileHandle *fh = NULL, *itr;
     FILE *f;
     char filename[50];
@@ -505,20 +509,19 @@ void file_data_received(int sock_index, char *payload, uint8_t transfer_id, unsi
         fh->f = f;
         fh->socket = sock_index;
         fh->isopen = TRUE;
+        memset(fh->contents, 0, sizeof fh->contents);
         LIST_INSERT_HEAD(&file_handle_list, fh, next);
     }
-    printf("WRITE TO FILE:%s\n", payload);
-    fwrite(payload, sizeof(char), 1024, fh->f);
+    //printf("WRITE TO FILE:%s\n", payload);
+    strcat(fh->contents, payload);
 
     if (fin_bit != 0){
         fh->isopen = FALSE;
+        fwrite(fh->contents, sizeof(char), strlen(fh->contents), fh->f);
         fclose(fh->f);
     }
 
-    if(fh->isopen){
-        printf("FILE NOT CLOSED YET\n");
-    }
-    else{
+    if(!fh->isopen){
         printf("FILE CLOSED. TRANSFER COMPLETE\n");
     }
 

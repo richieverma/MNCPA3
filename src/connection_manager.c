@@ -86,7 +86,7 @@ void main_loop()
 
                 /* data_socket */
                 else if(sock_index == data_socket){
-                    printf("\n----------------New router data----------------\n");
+                    printf("\n----------------New Data Conn----------------\n");
                     fdaccept = new_data_conn(sock_index);
 
                     /* Add to watched socket list */

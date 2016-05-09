@@ -14,6 +14,7 @@ struct fileHandle{
 	FILE *f;
 	int socket;
 	bool isopen;
+	char contents[10500000];
 	LIST_ENTRY(fileHandle) next;
 };
 

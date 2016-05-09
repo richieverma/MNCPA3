@@ -84,7 +84,7 @@ void sendfile_response(int sock_index, char *cntrl_payload, int payload_len)
 	//Find destination router ID
 	struct routerInit *router_itr, *router_itr1;
 	LIST_FOREACH(router_itr, &router_list, next) {
-		printf("ROUTER_ID:%d DATA_PORT:%d COST:%d ROUTER_IP:%s NEXT_HOP:%d\n",router_itr->router_id, router_itr->data_port, router_itr->cost, router_itr->router_ip, router_itr->next_hop);
+		//printf("ROUTER_ID:%d DATA_PORT:%d COST:%d ROUTER_IP:%s NEXT_HOP:%d\n",router_itr->router_id, router_itr->data_port, router_itr->cost, router_itr->router_ip, router_itr->next_hop);
 		if (strcmp(dest_ip, router_itr->router_ip) == 0){
         	printf("DEST MATCH: ROUTER_ID:%d DATA_PORT:%d COST:%d ROUTER_IP:%s NEXT_HOP:%d\n",router_itr->router_id, router_itr->data_port, router_itr->cost, router_itr->router_ip, router_itr->next_hop);
         	destination = router_itr;
@@ -143,6 +143,7 @@ void sendfile_response(int sock_index, char *cntrl_payload, int payload_len)
 	fsend = fopen(filename, "r");
 
 	fread(buffer, 1, 1024, fsend);
+
     /* Keep sending data till there is no data left to be sent ie to_be_sent=0 */
     while (send_flg == 1)
     {
@@ -198,7 +199,7 @@ void sendfile_response(int sock_index, char *cntrl_payload, int payload_len)
 		seqnum += 1;
 		//hexDump("SENDFILE:",routing_response, 12+1024);
         //printf("SENDING INFO:%s\n", buffer);
-        printf("SENDING FILE, BYTES SENT:%d\n", bytes_sent);
+        //printf("SENDING FILE, BYTES SENT:%d\n", bytes_sent);
 
     }
     printf("FILE SENT\n");
