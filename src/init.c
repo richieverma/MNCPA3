@@ -149,7 +149,7 @@ void init_response(int sock_index, char *cntrl_payload)
 	struct in_addr ip;
 	char *router_ip;
 
-	printf("INIT_RESPONSE:%d\n",sock_index);
+	//printf("INIT_RESPONSE:%d\n",sock_index);
 	
 	memcpy(&no_routers, cntrl_payload, 2);
     no_routers = ntohs(no_routers);
@@ -165,7 +165,7 @@ void init_response(int sock_index, char *cntrl_payload)
     LIST_INIT(&sendfile_stats_list);
     LIST_INIT(&file_handle_list);
 
-	printf("ROUTERS:%d UPDATES:%d\n",no_routers, updates_periodic_interval);
+	//printf("ROUTERS:%d UPDATES:%d\n",no_routers, updates_periodic_interval);
 
     for (int i = 0; i < no_routers; i++){
 
@@ -223,7 +223,7 @@ void init_response(int sock_index, char *cntrl_payload)
 	    	LIST_INSERT_HEAD(&track_update_list, r, track); //Add to list of routers to be tracked for routing updates
 	    }	    
     }
-	printf("MY_ID:%d MY_TABLE_ID:%d\n",me->router_id, me->table_id);
+	//printf("MY_ID:%d MY_TABLE_ID:%d\n",me->router_id, me->table_id);
     //Initialize all entries of routing table with cost INF
 	for (int i = 0; i < 5; i++) {
 		for (int j = 0; j < 5; j++){
@@ -241,7 +241,7 @@ void init_response(int sock_index, char *cntrl_payload)
 	    else{
 	    	router_itr->next_hop = INF;
 	    }	    
-        printf("ROUTER_ID:%d ROUTER_PORT:%d DATA_PORT:%d COST:%d ROUTER_IP:%s NEXT_HOP:%d TABLE_ID:%d\n",router_itr->router_id, router_itr->router_port, router_itr->data_port, router_itr->cost, router_itr->router_ip, router_itr->next_hop, router_itr->table_id);
+        //printf("ROUTER_ID:%d ROUTER_PORT:%d DATA_PORT:%d COST:%d ROUTER_IP:%s NEXT_HOP:%d TABLE_ID:%d\n",router_itr->router_id, router_itr->router_port, router_itr->data_port, router_itr->cost, router_itr->router_ip, router_itr->next_hop, router_itr->table_id);
         route_table[me->table_id][router_itr->table_id] = router_itr->cost;
         orig_route_table[me->table_id][router_itr->table_id] = router_itr->cost;
     }
@@ -316,7 +316,7 @@ void send_initial_routing_packet(unsigned updates_periodic_interval){
         packi16(buf, router_itr->cost);
         memcpy(routing_response + 8 +  (num_update_fields * 12) + 10, buf, 2);			    
         
-        printf("ROUTER_ID:%d ROUTER_PORT:%d DATA_PORT:%d COST:%d ROUTER_IP:%s NEXT_HOP:%d TABLE_ID:%d\n",router_itr->router_id, router_itr->router_port, router_itr->data_port, router_itr->cost, router_itr->router_ip, router_itr->next_hop, router_itr->table_id);
+        //printf("ROUTER_ID:%d ROUTER_PORT:%d DATA_PORT:%d COST:%d ROUTER_IP:%s NEXT_HOP:%d TABLE_ID:%d\n",router_itr->router_id, router_itr->router_port, router_itr->data_port, router_itr->cost, router_itr->router_ip, router_itr->next_hop, router_itr->table_id);
         num_update_fields++;
     } 
     free(buf);
@@ -331,12 +331,9 @@ void send_initial_routing_packet(unsigned updates_periodic_interval){
 		char nbuf[5];
 
 		dest_data_sockets[router_itr->table_id] = create_tcp_conn(router_itr->router_ip, router_itr->data_port);
-	    printf("Connection established with %d, socket:%d\n", router_itr->router_id, dest_data_sockets[router_itr->table_id]);
+	    //printf("Connection established with %d, socket:%d\n", router_itr->router_id, dest_data_sockets[router_itr->table_id]);
 
 		snprintf(nbuf,5,"%d",router_itr->router_port);
-		printf("Neighbour PORT: %s\n", nbuf);
-		printf("Size of routing packet: %d\n", response_len);
-		printf("num_update_fields: %d\n", num_update_fields);
 
 		memset(&hints, 0, sizeof hints);
 		hints.ai_family = AF_UNSPEC;
@@ -362,11 +359,11 @@ void send_initial_routing_packet(unsigned updates_periodic_interval){
 		if ((numbytes = sendto(sockfd, routing_response, response_len, 0, p->ai_addr, p->ai_addrlen)) == -1){
 				perror("talker: sendto error");
 			
-			printf("Sent %d bytes so far. Total to be sent:%d\n", numbytes, response_len);
+			//printf("Sent %d bytes so far. Total to be sent:%d\n", numbytes, response_len);
 		}
 
 		freeaddrinfo(servinfo);
-		printf("Sent %d bytes in total. Out of:%d\n", numbytes, response_len);
+		//printf("Sent %d bytes in total. Out of:%d\n", numbytes, response_len);
 		close(sockfd);
 		//close(sock);
 	} 

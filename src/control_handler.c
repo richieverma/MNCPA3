@@ -412,7 +412,6 @@ bool data_recv_hook(int sock_index)
 
     //Socket closed
     nbytes = recvALL(sock_index, packet, 1036);
-    printf("NNNNNBBBBYYYTTTTEEESSS%d\n", nbytes);
     if(nbytes <= 0){
         //Remove socket
         printf("Socket to be closed\n");
@@ -427,13 +426,6 @@ bool data_recv_hook(int sock_index)
     dest_ip = (char *)malloc(strlen(dip));
     strcpy(dest_ip,dip);
     //printf("DATARECVHOOK dest_ip:%s\n", dest_ip);
-
-    if (strcmp(dest_ip, "0.0.0.0") == 0){
-        printf("IP Socket to be %d nbytes %d closed:%s\n",strlen(packet),nbytes, packet);
-        //remove_data_conn(sock_index);
-        //return FALSE;  
-        return FALSE;
-    }
 
     //Read transfr_id, ttl, seq
     memcpy(&transfer_id, packet + 4, 1);
@@ -523,7 +515,7 @@ void file_data_received(int sock_index, char *payload, uint8_t transfer_id, unsi
 
     if (fin_bit != 0){
         fh->isopen = FALSE;
-        fwrite(fh->contents, sizeof(char), strlen(fh->contents), fh->f);
+        fwrite(fh->contents, sizeof(char), strlen(fh->contents)-1, fh->f);
         fclose(fh->f);
     }
 
